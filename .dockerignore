@@ -1,0 +1,41 @@
+# ── Datasets & large raw data ──────────────────────────────────────────────────
+datasets/
+data/
+ai-service/datasets/
+ai-service/data/
+ai-service/outputs/
+ai-service/report_generation/vlm_weights/
+
+# Model weights – Include NIH saved models (nih_densenet121.pth) in Docker build context
+*.h5
+*.bin
+*.safetensors
+*.zip
+*.tar.gz
+
+!ai-service/test_nih/saved_models/
+!ai-service/test_nih/saved_models/*
+
+# ── Python caches & environments ───────────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+Backend/node_modules/
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+coverage/
+
+# ── Git & logs ─────────────────────────────────────────────────────────────────
+.git/
+.gitignore
+logs/
+*.log
+
+# ── Build outputs ──────────────────────────────────────────────────────────────
+build/
+dist/
+frontend/build/

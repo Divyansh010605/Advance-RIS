@@ -1,0 +1,94 @@
+networks:
+  xray-net:
+    driver: bridge
+
+volumes:
+  mongo-data:
+
+services:
+  mongo:
+    image: mongo:7.0
+    container_name: mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-secret}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-nihxray}
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - xray-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: ai-service
+    restart: unless-stopped
+    environment:
+      # Path inside the container where the NIH DenseNet-121 checkpoint lives.
+      # The default matches the location baked into the image (test_nih/saved_models/).
+      # Override via MODEL_HOST_PATH to mount an external checkpoint instead.
+      MODEL_PATH: /app/test_nih/saved_models/nih_densenet121.pth
+      CONFIG_DIR: /app/configs
+      LOG_LEVEL: info
+    volumes:
+      # Optional: mount an external model file to avoid baking it into the image.
+      # Set MODEL_HOST_PATH to the directory containing nih_densenet121.pth.
+      # Comment out if the checkpoint is already present in the image build context.
+      - ${MODEL_HOST_PATH:-./ai-service/test_nih/saved_models}:/app/test_nih/saved_models
+    networks:
+      - xray-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      MONGO_URI: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-secret}@mongo:27017/${MONGO_DB:-nihxray}?authSource=admin
+      JWT_SECRET: ${JWT_SECRET:-supersecretjwtkey123}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      AI_SERVICE_URL: http://ai-service:8000
+      AI_TIMEOUT_MS: ${AI_TIMEOUT_MS:-30000}
+    networks:
+      - xray-net
+    ports:
+      - "5000:5000"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    restart: unless-stopped
+    environment:
+      REACT_APP_API_URL: http://backend:5000
+    networks:
+      - xray-net
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
