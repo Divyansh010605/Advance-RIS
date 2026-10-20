@@ -12,11 +12,13 @@ ai-service/report_generation/vlm_weights/
 *.safetensors
 *.zip
 *.tar.gz
+ai-service/test.onnx
+ai-service/test2.onnx
 
 !ai-service/test_nih/saved_models/
 !ai-service/test_nih/saved_models/*
 
-# ── Python caches & environments ───────────────────────────────────────────────
+# ── Caches & Virtual Environments ──────────────────────────────────────────────
 node_modules/
 frontend/node_modules/
 Backend/node_modules/
@@ -24,16 +26,20 @@ venv/
 .venv/
 env/
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 .pytest_cache/
 .coverage
 coverage/
+htmlcov/
 
 # ── Git & logs ─────────────────────────────────────────────────────────────────
 .git/
 .gitignore
 logs/
 *.log
+Backend/logs/
+Backend/uploads/
 
 # ── Build outputs ──────────────────────────────────────────────────────────────
 build/

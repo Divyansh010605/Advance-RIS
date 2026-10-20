@@ -15,6 +15,20 @@ class PredictionRequest(BaseModel):
         default="image/jpeg",
         description="Image MIME type.",
     )
+    use_ensemble: bool = Field(
+        default=False,
+        description="Whether to run multi-model ensemble (DenseNet-121, ResNet-50, Swin-T).",
+    )
+    use_tta: bool = Field(
+        default=False,
+        description="Whether to execute Test-Time Augmentation (TTA).",
+    )
+    tta_steps: int = Field(
+        default=2,
+        ge=1,
+        le=4,
+        description="Number of TTA augmentation passes (1=Identity, 2=HFlip, 3=CenterScale, 4=Contrast).",
+    )
 
     @field_validator("mime_type")
     @classmethod
@@ -63,6 +77,18 @@ class DiseasePrediction(BaseModel):
     probability: float
     threshold: float
     detected: bool
+    uncertainty: Optional[float] = Field(
+        default=None,
+        description="Predictive standard deviation across ensemble / TTA passes.",
+    )
+    confidence_interval: Optional[List[float]] = Field(
+        default=None,
+        description="95% confidence interval [lower_bound, upper_bound].",
+    )
+    is_uncertain: Optional[bool] = Field(
+        default=None,
+        description="Flag indicating high predictive uncertainty requiring clinical attention.",
+    )
 
 
 class HeatmapItem(BaseModel):

@@ -1,0 +1,50 @@
+# Base configuration for NIH ChestX-ray14 multi-label classifiers
+# Inherited by model-specific YAML configurations
+
+data:
+  csv_path: "test_nih/Data_Entry_2017_v2020.csv"
+  images_dir: "test_nih/images"
+  train_val_list_path: null     # path to official train_val_list.txt if available
+  test_list_path: null          # path to official test_list.txt if available
+  val_fraction: 0.1             # patient-level validation fraction
+  test_fraction: 0.1            # patient-level test fraction (if no official test list)
+  image_size: 224
+  num_workers: 0                # 0 is safest on Windows; use 4 on Linux
+  pin_memory: true
+  cache_in_memory: false
+
+training:
+  seed: 42
+  epochs: 20
+  batch_size: 32
+  learning_rate: 0.0001
+  min_lr: 0.000001
+  weight_decay: 0.0001
+  warmup_epochs: 2
+  loss_type: "bce_pos_weight"    # choices: bce_pos_weight, bce, focal
+  max_pos_weight: 50.0
+  focal_gamma: 2.0
+  grad_clip_norm: 1.0
+  early_stopping_patience: 5
+  amp: true                      # automatic mixed precision (fp16 on CUDA)
+  channels_last: true            # memory format optimization on Tensor Cores
+  torch_compile: false           # enable on Linux / PyTorch 2.x CUDA if stable
+
+classes:
+  - "Atelectasis"
+  - "Cardiomegaly"
+  - "Effusion"
+  - "Infiltration"
+  - "Mass"
+  - "Nodule"
+  - "Pneumonia"
+  - "Pneumothorax"
+  - "Consolidation"
+  - "Edema"
+  - "Emphysema"
+  - "Fibrosis"
+  - "Pleural_Thickening"
+  - "Hernia"
+
+output:
+  save_dir: "outputs/retrained"

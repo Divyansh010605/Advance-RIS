@@ -4,25 +4,30 @@ data/
 outputs/
 report_generation/vlm_weights/
 
-# Model weights – Include NIH saved models (nih_densenet121.pth) in Docker build context
+# Model weights & large scratch files
 *.h5
 *.bin
 *.safetensors
 *.zip
 *.tar.gz
+test.onnx
+test2.onnx
 
+# Explicitly preserve NIH production checkpoint
 !test_nih/saved_models/
 !test_nih/saved_models/*
 
-# ── Python caches & environments ───────────────────────────────────────────────
+# ── Python caches & virtual environments ───────────────────────────────────────
 venv/
 .venv/
 env/
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 .pytest_cache/
 .coverage
 coverage/
+htmlcov/
 
 # ── Git & logs ─────────────────────────────────────────────────────────────────
 .git/

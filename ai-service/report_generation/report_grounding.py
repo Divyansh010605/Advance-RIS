@@ -4,11 +4,23 @@ Ensures generated radiology reports do not make unsupported pathology claims.
 """
 from typing import List, Dict, Tuple, Set
 
-# Known disease aliases for checking text claims against detected conditions
+# Aliases used to detect positive claims about each NIH class in free-form report text.
+# Negative phrases ("no effusion", "without atelectasis") are already handled by the checker.
 DISEASE_ALIASES: Dict[str, Set[str]] = {
-    "Tuberculosis": {"tuberculosis", "tb", "cavitary lesion", "apical infiltrate", "mycobacterium"},
-    "Sick_Non_TB": {"sick_non_tb", "non-tb opacity", "pulmonary opacity", "non-tb disease", "consolidation"},
-    "Healthy": {"healthy", "normal", "clear lungs", "unremarkable"}
+    "Atelectasis":         {"atelectasis", "plate-like opacity", "subsegmental collapse", "linear opacity"},
+    "Cardiomegaly":        {"cardiomegaly", "enlarged heart", "cardiac enlargement", "increased cardiac silhouette"},
+    "Effusion":            {"effusion", "pleural effusion", "costophrenic blunting", "pleural fluid"},
+    "Infiltration":        {"infiltration", "pulmonary infiltrate", "hazy opacity", "infiltrate"},
+    "Mass":                {"mass", "pulmonary mass", "lung mass", "soft-tissue opacity"},
+    "Nodule":              {"nodule", "pulmonary nodule", "lung nodule", "rounded opacity"},
+    "Pneumonia":           {"pneumonia", "airspace consolidation", "lobar consolidation", "air bronchogram"},
+    "Pneumothorax":        {"pneumothorax", "pleural line", "absent lung markings", "collapsed lung"},
+    "Consolidation":       {"consolidation", "lobar opacity", "airspace disease", "homogeneous opacity"},
+    "Edema":               {"edema", "pulmonary edema", "perihilar haze", "kerley b", "vascular redistribution"},
+    "Emphysema":           {"emphysema", "hyperinflation", "flattened diaphragm", "barrel chest"},
+    "Fibrosis":            {"fibrosis", "pulmonary fibrosis", "reticular pattern", "honeycombing"},
+    "Pleural_Thickening":  {"pleural thickening", "pleural_thickening", "thickened pleura", "pleural scarring"},
+    "Hernia":              {"hernia", "diaphragmatic hernia", "bowel above diaphragm", "hiatal hernia"},
 }
 
 

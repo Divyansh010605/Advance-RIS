@@ -1,0 +1,14 @@
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+uploads/
+logs/
+*.log
+.git/
+.gitignore
+.env
+.env.*
+tests/
+coverage/
+.DS_Store

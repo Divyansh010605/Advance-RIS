@@ -61,20 +61,15 @@ Place the extracted files under `ai-service/test_nih/` as shown:
 ```
 ai-service/
 └── test_nih/
-    ├── Data_Entry_2017_v2020.csv      ← label metadata (git-ignored)
-    ├── nih_classes.json
-    ├── nih_dataset.py
-    ├── train_nih.py
-    ├── predict_nih.py
-    ├── images/                        ← extracted image archives (git-ignored)
+    ├── Data_Entry_2017_v2020.csv      ← label metadata (7.8 MB)
+    ├── images/                        ← extracted image archives (PNG images)
     │   ├── 00000001_000.png
-    │   ├── 00000001_001.png
     │   └── …  (112 120 images total)
     └── saved_models/
-        └── nih_densenet121.pth        ← trained checkpoint (git-ignored, ~85 MB)
+        └── nih_densenet121.pth        ← trained checkpoint (~85 MB)
 ```
 
-> **Nested layout supported**: The dataset loader (`nih_dataset.py`) recursively  
+> **Nested layout supported**: The dataset loader (`src/data/dataset.py`) recursively  
 > searches for images, so `images_001/images/`, `images_002/images/`, … also work.
 
 ---
@@ -103,67 +98,42 @@ New-Item -ItemType Directory -Force images
 
 ---
 
-## 5. Training the Model
+## 5. Training the Models (Config-Driven Retraining Pipeline)
+
+Retraining uses the unified `src.train` module and YAML configurations:
 
 ```bash
-cd ai-service/test_nih
+cd ai-service
 
-# Basic (random init, 5 epochs)
-python train_nih.py \
-    --csv_path Data_Entry_2017_v2020.csv \
-    --images_dir images \
-    --epochs 5 \
-    --batch_size 16
+# Retrain DenseNet-121
+python -m src.train --config configs/densenet121.yaml
 
-# Recommended (ImageNet pretrained init, 20 epochs)
-python train_nih.py \
-    --csv_path Data_Entry_2017_v2020.csv \
-    --images_dir images \
-    --epochs 20 \
-    --batch_size 32 \
-    --pretrained
+# Retrain ResNet-50
+python -m src.train --config configs/resnet50.yaml
+
+# Retrain Swin Transformer Tiny
+python -m src.train --config configs/swin_tiny.yaml
+
+# Retrain all three sequentially
+bash scripts/retrain_all.sh       # Linux/macOS
+.\scripts\retrain_all.ps1        # Windows
 ```
 
-The best validation checkpoint is saved automatically to:  
-`ai-service/test_nih/saved_models/nih_densenet121.pth`
-
-### Training Options
-
-| Flag              | Default      | Description                                 |
-|-------------------|--------------|---------------------------------------------|
-| `--csv_path`      | auto-detect  | Path to `Data_Entry_2017_v2020.csv`         |
-| `--images_dir`    | `images/`    | Root directory containing the PNG images    |
-| `--epochs`        | 5            | Number of training epochs                   |
-| `--batch_size`    | 16           | Images per batch                            |
-| `--lr`            | 1e-4         | Learning rate (AdamW)                       |
-| `--val_fraction`  | 0.1          | Fraction of patients held out for validation|
-| `--workers`       | 0            | DataLoader workers (0 = safe on Windows)    |
-| `--pretrained`    | off          | Use ImageNet-pretrained DenseNet weights    |
-| `--save_dir`      | `saved_models/` | Checkpoint output directory             |
-| `--seed`          | 42           | Random seed for reproducibility             |
-
-> Validation is done on a **patient-level split** so no patient appears in both  
-> train and validation sets — this avoids data leakage.
+Checkpoints and metrics (AUROC, F1, sensitivity, specificity) are saved under `outputs/retrained/<model_name>/`.
 
 ---
 
-## 6. Running Inference (CLI)
+## 6. Explainable AI (XAI) Evaluation
+
+Evaluate model localization against NIH bounding box ground-truth (`BBox_List_2017.csv`):
 
 ```bash
-cd ai-service/test_nih
-python predict_nih.py \
-    --image /path/to/xray.png \
-    --model_path saved_models/nih_densenet121.pth
-```
-
-Sample output:
-
-```
---- NIH 14-Class Predictions for 00000001_000.png ---
-  [Positive] Atelectasis        : 67.34%
-  [Negative] Cardiomegaly       : 12.10%
-  [Negative] Effusion           : 28.90%
-  ...
+cd ai-service
+python -m src.eval.xai_eval \
+    --model_path test_nih/saved_models/nih_densenet121.pth \
+    --architecture densenet121 \
+    --bbox_csv test_nih/BBox_List_2017.csv \
+    --method gradcam++
 ```
 
 ---

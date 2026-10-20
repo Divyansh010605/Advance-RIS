@@ -1,0 +1,16 @@
+# Swin Transformer Tiny configuration (inherits base.yaml)
+base_config: "base.yaml"
+
+model:
+  name: "swin_tiny"
+  architecture: "swin_tiny_patch4_window7_224"
+  pretrained: true
+  num_classes: 14
+
+training:
+  batch_size: 16                # smaller batch size to fit attention map memory
+  learning_rate: 0.00005        # standard lower LR for vision transformers
+  weight_decay: 0.05            # standard AdamW decay for ViTs
+
+output:
+  save_dir: "outputs/retrained/swin_tiny"

@@ -29,11 +29,12 @@ class NIHDenseNet(nn.Module):
     Grad-CAM hooks capture gradients at the final feature map.
     """
 
-    def __init__(self, num_classes: int):
+    def __init__(self, num_classes: int, pretrained: bool = False):
         super().__init__()
         self.num_classes = num_classes
 
-        base = models.densenet121(weights=None)
+        weights = models.DenseNet121_Weights.DEFAULT if pretrained else None
+        base = models.densenet121(weights=weights)
         self.features = base.features          # DenseNet feature extractor
         in_features = base.classifier.in_features  # 1024
 
@@ -74,17 +75,18 @@ class NIHDenseNet(nn.Module):
 class MultiDiseaseModel:
     """High-level wrapper: load weights, run inference, expose Grad-CAM data."""
 
-    def __init__(self, num_classes: int, model_path: str = None):
+    def __init__(self, num_classes: int, model_path: str = None, pretrained: bool = False):
         self.device = DEVICE
         self.num_classes = num_classes
         self.model_path = model_path
+        self.pretrained = pretrained
         self.net: NIHDenseNet | None = None
 
     # ------------------------------------------------------------------
     # Load
     # ------------------------------------------------------------------
     def load(self):
-        self.net = NIHDenseNet(num_classes=self.num_classes).to(self.device)
+        self.net = NIHDenseNet(num_classes=self.num_classes, pretrained=self.pretrained).to(self.device)
 
         if self.model_path:
             import os

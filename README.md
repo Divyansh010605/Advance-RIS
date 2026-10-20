@@ -192,31 +192,32 @@ For BioMedCLIP Vision-Language Model download, offline caching, and Stage B conf
 ```
 Capstone-1/
 ├── ai-service/
-│   ├── app.py                        # FastAPI application entry point
-│   ├── models/
-│   │   ├── densenet_multilabel.py    # NIHDenseNet + MultiDiseaseModel
-│   │   └── tb_model.py               # TBModel wrapper (NIH 14-class)
-│   ├── configs/
-│   │   ├── classes.json              # 14 NIH class names
-│   │   └── thresholds.json           # Per-class detection thresholds
+│   ├── src/                          # Modular NIH-14 ML/VLM pipeline
+│   │   ├── data/                     # NIHChestXrayDataset & patient splits (zero leakage)
+│   │   ├── models/                   # DenseNet-121, ResNet-50, Swin-T & checkpoint loader
+│   │   ├── train/                    # MultiLabelTrainer, loss functions (BCE/Focal)
+│   │   ├── xai/                      # Grad-CAM, Grad-CAM++, Swin spatial transform
+│   │   ├── vlm/                      # MedGemma, LLaVA-Med, BiomedGPT fine-tuning & data builder
+│   │   └── eval/                     # Macro-AUROC metrics, XAI pointing game, VLM claim eval
+│   ├── app.py                        # FastAPI production service entry point
+│   ├── configs/                      # base.yaml, densenet121.yaml, resnet50.yaml, swin_tiny.yaml
+│   ├── models/                       # densenet_multilabel.py, nih_model.py, tb_model.py
 │   ├── test_nih/
-│   │   ├── train_nih.py              # Training script (NIH ChestX-ray14)
-│   │   ├── predict_nih.py            # CLI inference script
-│   │   ├── nih_dataset.py            # Dataset loader & CSV parser
-│   │   ├── nih_classes.json          # Class list for training
-│   │   ├── Data_Entry_2017_v2020.csv # NIH metadata CSV (git-ignored)
+│   │   ├── Data_Entry_2017_v2020.csv # Official NIH metadata
 │   │   └── saved_models/
-│   │       └── nih_densenet121.pth   # Trained checkpoint (git-ignored)
-│   ├── utils/
-│   │   ├── image_processor.py
-│   │   └── gradcam.py
-│   ├── report_generation/
-│   │   ├── vlm_report.py
-│   │   └── report_grounding.py
+│   │       └── nih_densenet121.pth   # Verified production checkpoint (14 classes)
+│   ├── outputs/                      # Saved retraining runs, XAI and VLM evaluation outputs
+│   ├── scripts/                      # retrain_all.sh & retrain_all.ps1
+│   ├── report_generation/            # generator.py, vlm_report.py, report_grounding.py
+│   ├── schemas/                      # prediction.py
+│   ├── utils/                        # image_processor.py, gradcam.py
+│   ├── tests/                        # pytest test suite
+│   ├── Architecture.md               # Technical architecture & neural network specs
+│   ├── Decision.md                   # Machine learning design decisions & justifications
 │   ├── Dockerfile
 │   └── requirements.txt
-├── Backend/                          # Node.js / Express API
-├── frontend/                         # React 18 SPA
+├── Backend/                          # Node.js / Express API gateway
+├── frontend/                         # React 18 single page application
 ├── docker-compose.yml
 ├── DATASET_SETUP.md
 └── VLM_SETUP.md

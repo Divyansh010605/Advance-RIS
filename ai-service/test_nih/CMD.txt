@@ -1,1 +1,0 @@
-python train_nih.py --csv_path "Data_Entry_2017_v2020.csv" --images_dir "images" --epochs 20 --batch_size 32

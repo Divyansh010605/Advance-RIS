@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1
 FROM python:3.11-slim
 
-# System deps:
-#   libgl1 / libglib2.0-0 / libsm6 / libxext6 / libxrender-dev  – OpenCV
-#   libgomp1  – PyTorch CPU OpenMP kernels
-#   curl      – container healthcheck
+# System dependencies:
+#   libgl1 / libglib2.0-0 / libsm6 / libxext6 / libxrender-dev – OpenCV & imaging
+#   libgomp1                                                  – PyTorch CPU OpenMP kernels
+#   curl                                                      – Container healthcheck
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
@@ -16,29 +16,31 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
 
 WORKDIR /app
 
-# ── Install Python dependencies (cache layer) ─────────────────────────────────
+# ── Install Python dependencies (cached build layer) ──────────────────────────
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt \
         --extra-index-url https://download.pytorch.org/whl/cpu
 
 # ── Copy application source ───────────────────────────────────────────────────
-# The *.pth checkpoint is excluded by .dockerignore; mount it via a Docker
-# volume (see docker-compose.yml MODEL_HOST_PATH) or copy it manually:
-#   docker cp nih_densenet121.pth ai-service:/app/test_nih/saved_models/
-LABEL build-version="2026-09-NIH-v1"
+LABEL maintainer="NIH Multi-Disease AI Team"
+LABEL build-version="2026-10-NIH-v2.2.0"
 COPY . .
 
-# Ensure the saved_models directory exists even when no volume is mounted
-RUN mkdir -p /app/test_nih/saved_models
+# Ensure required runtime, model, and output directories exist
+RUN mkdir -p /app/test_nih/saved_models \
+             /app/outputs/onnx \
+             /app/outputs/retrained \
+             /app/outputs/vlm
 
 EXPOSE 8000
 
-# Healthcheck – generous start_period because DenseNet weights take time on CPU
+# Healthcheck – allows start-period for PyTorch & DenseNet cold load
 HEALTHCHECK --interval=15s --timeout=10s --start-period=60s --retries=5 \
     CMD curl -f http://localhost:8000/health || exit 1
 
