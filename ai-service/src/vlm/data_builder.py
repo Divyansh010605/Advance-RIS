@@ -46,8 +46,9 @@ def build_vlm_instruction_dataset(
         norm_labels = [l.replace(" ", "_") for l in raw_labels if l in classes or l.replace(" ", "_") in classes]
 
         # 1. Findings List Instruction
-        if norm_labels:
-            resp_list = f"Identified findings: {', '.join(sorted(norm_labels))}."
+        pathology_labels = [l for l in norm_labels if l not in ("No_Finding", "No Finding")]
+        if pathology_labels:
+            resp_list = f"Identified findings: {', '.join(sorted(pathology_labels))}."
         else:
             resp_list = "No Finding. The chest radiograph demonstrates no acute thoracic abnormalities."
 

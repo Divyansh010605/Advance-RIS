@@ -242,16 +242,17 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    num_classes = len(NIH_CLASSES)
     # 1. Build Model
     if args.architecture == "densenet121":
         from src.models.densenet import build_densenet121
-        model = build_densenet121(num_classes=14, pretrained=False)
+        model = build_densenet121(num_classes=num_classes, pretrained=False)
     elif args.architecture == "resnet50":
         from src.models.resnet import build_resnet50
-        model = build_resnet50(num_classes=14, pretrained=False)
+        model = build_resnet50(num_classes=num_classes, pretrained=False)
     else:
         from src.models.swin import build_swin_tiny
-        model = build_swin_tiny(num_classes=14, pretrained=False)
+        model = build_swin_tiny(num_classes=num_classes, pretrained=False)
 
     model.to(device)
 

@@ -16,7 +16,7 @@ class NIHSwin(nn.Module):
     Feature map shape: (B, 7, 7, 768).
     """
 
-    def __init__(self, num_classes: int = 14, pretrained: bool = True):
+    def __init__(self, num_classes: int = 15, pretrained: bool = True):
         super().__init__()
         self.num_classes = num_classes
         self.model = timm.create_model(
@@ -46,7 +46,7 @@ class NIHSwin(nn.Module):
         return logits, fmaps
 
 
-def build_swin_tiny(num_classes: int = 14, pretrained: bool = True) -> NIHSwin:
+def build_swin_tiny(num_classes: int = 15, pretrained: bool = True) -> NIHSwin:
     """Builds Swin-T classifier for NIH ChestX-ray14."""
     return NIHSwin(num_classes=num_classes, pretrained=pretrained)
 

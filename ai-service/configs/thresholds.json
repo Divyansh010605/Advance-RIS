@@ -12,5 +12,6 @@
   "Emphysema":         0.45,
   "Fibrosis":          0.45,
   "Pleural_Thickening":0.45,
-  "Hernia":            0.45
+  "Hernia":            0.45,
+  "No_Finding":        0.45
 }

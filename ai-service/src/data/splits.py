@@ -7,13 +7,16 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 logger = logging.getLogger(__name__)
 
 
-def parse_nih_csv(csv_path: str, images_dir: str) -> List[Dict[str, Any]]:
+def parse_nih_csv(csv_path: str, images_dir: Optional[str] = None, image_dir: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Parses NIH Data_Entry_2017.csv / Data_Entry_2017_v2020.csv into records.
     Builds a filename index to support flat or nested image directories.
     """
+    resolved_dir = images_dir or image_dir
+    if not resolved_dir:
+        raise ValueError("Must provide either images_dir or image_dir")
     csv_file = Path(csv_path)
-    image_root = Path(images_dir)
+    image_root = Path(resolved_dir)
     if not csv_file.is_file():
         raise FileNotFoundError(f"NIH CSV file not found: {csv_file}")
     if not image_root.is_dir():
@@ -49,9 +52,9 @@ def parse_nih_csv(csv_path: str, images_dir: str) -> List[Dict[str, Any]]:
                     continue
 
             labels = [
-                lbl.strip().replace(" ", "_")
+                "No_Finding" if lbl.strip() in ("No Finding", "No_Finding") else lbl.strip().replace(" ", "_")
                 for lbl in findings_str.split("|")
-                if lbl.strip() and lbl.strip() != "No Finding"
+                if lbl.strip()
             ]
 
             parsed_records.append({

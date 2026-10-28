@@ -45,6 +45,7 @@ classes:
   - "Fibrosis"
   - "Pleural_Thickening"
   - "Hernia"
+  - "No_Finding"
 
 output:
   save_dir: "outputs/retrained"

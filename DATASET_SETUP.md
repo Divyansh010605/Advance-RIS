@@ -11,7 +11,7 @@ The **NIH ChestX-ray14** dataset contains **112,120 frontal-view chest X-ray ima
 from 30,805 unique patients, each annotated with up to 14 thoracic pathology labels  
 (NLP-mined from radiology reports).
 
-### Target Classes (14 findings)
+### Target Classes (15 findings)
 
 | Label              | Description                                 |
 |--------------------|---------------------------------------------|
@@ -29,9 +29,10 @@ from 30,805 unique patients, each annotated with up to 14 thoracic pathology lab
 | Fibrosis           | Lung scarring / interstitial fibrosis       |
 | Pleural_Thickening | Pleural thickening                          |
 | Hernia             | Diaphragmatic hernia                        |
+| No_Finding         | Normal chest radiograph (no acute findings) |
 
 Labels are **multi-hot** (a single image can carry multiple labels).  
-The `No Finding` label is excluded during training.
+The `No_Finding` label is explicitly included as the 15th target class during training.
 
 ---
 
@@ -47,7 +48,7 @@ Files to download:
 
 | File                          | Size    | Notes                                      |
 |-------------------------------|---------|--------------------------------------------|
-| `images_001.tar.gz` … `images_012.tar.gz` | ~42 GB total | 12 image archive parts       |
+| `images_001.tar.gz` … `images_012.tar.gz` | ~42 GB total | 12 image archive parts    |
 | `Data_Entry_2017_v2020.csv`   | ~7.9 MB | Label metadata (one row per image)         |
 | `train_val_list.txt`          | optional | Official train/val split                  |
 | `test_list.txt`               | optional | Official test split                       |

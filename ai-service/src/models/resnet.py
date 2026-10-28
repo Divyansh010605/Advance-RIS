@@ -16,7 +16,7 @@ class NIHResNet50(nn.Module):
     Grad-CAM hooks target layer4 (output channels: 2048, spatial: 7x7 at 224x224 input).
     """
 
-    def __init__(self, num_classes: int = 14, pretrained: bool = True):
+    def __init__(self, num_classes: int = 15, pretrained: bool = True):
         super().__init__()
         self.num_classes = num_classes
 
@@ -64,7 +64,7 @@ class NIHResNet50(nn.Module):
         return logits, fmaps
 
 
-def build_resnet50(num_classes: int = 14, pretrained: bool = True) -> NIHResNet50:
+def build_resnet50(num_classes: int = 15, pretrained: bool = True) -> NIHResNet50:
     """Builds ResNet-50 classifier for NIH ChestX-ray14."""
     return NIHResNet50(num_classes=num_classes, pretrained=pretrained)
 

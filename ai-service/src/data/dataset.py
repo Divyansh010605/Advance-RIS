@@ -24,6 +24,7 @@ NIH_CLASSES: List[str] = [
     "Fibrosis",
     "Pleural_Thickening",
     "Hernia",
+    "No_Finding",
 ]
 
 IMAGENET_MEAN = [0.485, 0.456, 0.406]

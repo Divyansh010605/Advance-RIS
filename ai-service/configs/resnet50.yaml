@@ -5,7 +5,7 @@ model:
   name: "resnet50"
   architecture: "resnet50"
   pretrained: true
-  num_classes: 14
+  num_classes: 15
 
 training:
   batch_size: 32

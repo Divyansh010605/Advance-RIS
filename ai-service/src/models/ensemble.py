@@ -69,13 +69,13 @@ class MultiModelEnsemble:
 
     def __init__(
         self,
-        num_classes: int = 14,
+        num_classes: int = 15,
         classes: Optional[List[str]] = None,
         weights: Optional[Dict[str, float]] = None,
         device: Optional[Union[str, torch.device]] = None,
     ):
-        self.num_classes = num_classes
         self.classes = classes or NIH_CLASSES
+        self.num_classes = len(self.classes) if classes is not None else num_classes
         self.device = torch.device(device if device else ("cuda" if torch.cuda.is_available() else "cpu"))
 
         # Default model weighting based on validation macro-AUROC hierarchy

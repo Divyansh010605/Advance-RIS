@@ -13,6 +13,7 @@
     "Emphysema",
     "Fibrosis",
     "Pleural_Thickening",
-    "Hernia"
+    "Hernia",
+    "No_Finding"
   ]
 }

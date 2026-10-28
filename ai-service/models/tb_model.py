@@ -56,7 +56,7 @@ class TBModel:
             "Atelectasis", "Cardiomegaly", "Effusion", "Infiltration",
             "Mass", "Nodule", "Pneumonia", "Pneumothorax",
             "Consolidation", "Edema", "Emphysema", "Fibrosis",
-            "Pleural_Thickening", "Hernia",
+            "Pleural_Thickening", "Hernia", "No_Finding",
         ]
 
     def _load_thresholds(self) -> Dict[str, float]:

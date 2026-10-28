@@ -5,7 +5,7 @@ model:
   name: "swin_tiny"
   architecture: "swin_tiny_patch4_window7_224"
   pretrained: true
-  num_classes: 14
+  num_classes: 15
 
 training:
   batch_size: 16                # smaller batch size to fit attention map memory
