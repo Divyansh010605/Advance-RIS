@@ -1,6 +1,6 @@
 """
-Tri-Model Ensemble & Test-Time Augmentation (TTA) with Uncertainty Quantification.
-Combines DenseNet-121, ResNet-50, and Swin-T multi-label classifiers for NIH ChestX-ray14.
+Multi-model Ensemble & Test-Time Augmentation (TTA) with Uncertainty Quantification.
+Supports DenseNet-121, ResNet-50, and Swin-T multi-label classifiers for NIH ChestX-ray14.
 """
 import logging
 from pathlib import Path
@@ -63,7 +63,7 @@ class TestTimeAugmentation:
 
 class MultiModelEnsemble:
     """
-    Orchestrates tri-model soft-voting ensemble across DenseNet-121, ResNet-50, and Swin-T
+    Orchestrates weighted soft-voting across registered DenseNet-121, ResNet-50, and Swin-T models
     with Test-Time Augmentation (TTA) and Monte-Carlo/ensemble uncertainty estimation.
     """
 
@@ -79,7 +79,7 @@ class MultiModelEnsemble:
         self.device = torch.device(device if device else ("cuda" if torch.cuda.is_available() else "cpu"))
 
         # Default model weighting based on validation macro-AUROC hierarchy
-        # DenseNet-121 (0.45) > Swin-T (0.30) > ResNet-50 (0.25)
+        # Raw defaults are normalized over whichever models are registered.
         self.raw_weights = weights or {
             "densenet121": 0.45,
             "swin_tiny": 0.30,
@@ -188,7 +188,9 @@ class MultiModelEnsemble:
             for aug_tensor, transform_name in aug_list:
                 for model_name, model in self.models.items():
                     logits, fmaps = model(aug_tensor)
-                    probs = torch.sigmoid(logits)  # (B, num_classes)
+                    # TorchXRayVision adapters already return probability scores after
+                    # applying XRV's operating-point normalization.
+                    probs = logits if getattr(model, "xrv_probabilities", False) else torch.sigmoid(logits)
 
                     all_pass_probs.append(probs)
                     per_model_probs[model_name].append(probs)

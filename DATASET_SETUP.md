@@ -32,7 +32,7 @@ from 30,805 unique patients, each annotated with up to 14 thoracic pathology lab
 | No_Finding         | Normal chest radiograph (no acute findings) |
 
 Labels are **multi-hot** (a single image can carry multiple labels).  
-The `No_Finding` label is explicitly included as the 15th target class during training.
+The NIH training pipeline includes `No_Finding` as its 15th label. In production XRV inference, `No_Finding` is derived from the 14 pathology scores because the selected TorchXRayVision weights do not include a trained `No Finding` output.
 
 ---
 
@@ -66,8 +66,7 @@ ai-service/
     ├── images/                        ← extracted image archives (PNG images)
     │   ├── 00000001_000.png
     │   └── …  (112 120 images total)
-    └── saved_models/
-        └── nih_densenet121.pth        ← trained checkpoint (~85 MB)
+    └── saved_models/                  # Optional local research checkpoints
 ```
 
 > **Nested layout supported**: The dataset loader (`src/data/dataset.py`) recursively  
@@ -131,7 +130,6 @@ Evaluate model localization against NIH bounding box ground-truth (`BBox_List_20
 ```bash
 cd ai-service
 python -m src.eval.xai_eval \
-    --model_path test_nih/saved_models/nih_densenet121.pth \
     --architecture densenet121 \
     --bbox_csv test_nih/BBox_List_2017.csv \
     --method gradcam++
@@ -141,22 +139,21 @@ python -m src.eval.xai_eval \
 
 ## 7. Docker Volume Mount
 
-The trained checkpoint is **not baked into the Docker image** (too large for CI/CD).  
-It is mounted at container startup via the `docker-compose.yml` volume:
+Production inference does not require a locally trained NIH checkpoint. TorchXRayVision downloads `densenet121-res224-all` and `resnet50-res512-all` at first startup and caches them in its user cache directory. NIH dataset files and local checkpoints are only needed for the research training and evaluation workflows above.
 
 ```yaml
 volumes:
-  - ${MODEL_HOST_PATH:-./ai-service/test_nih/saved_models}:/app/test_nih/saved_models
+  - ${XRV_CACHE_PATH:-./xrv-cache}:/root/.torchxrayvision
 ```
 
-Set `MODEL_HOST_PATH` in your `.env` file if the checkpoint lives elsewhere:
+Set `XRV_CACHE_PATH` in your `.env` file to choose another host cache directory:
 
 ```env
-MODEL_HOST_PATH=/data/models/nih
+XRV_CACHE_PATH=/data/cache/torchxrayvision
 ```
 
 Or specify it inline:
 
 ```bash
-MODEL_HOST_PATH=/data/models/nih docker compose up -d
+XRV_CACHE_PATH=/data/cache/torchxrayvision docker compose up -d
 ```

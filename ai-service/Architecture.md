@@ -68,27 +68,30 @@ flowchart TD
 ## 2. Model Zoo Specifications
 
 ### 2.1 DenseNet-121 (`NIHDenseNet`)
-- **Backbone**: 4 Dense Blocks → Transition Layers (Conv + AvgPool) → 121 layers total.
-- **Classification Head**: Global Average Pooling → `nn.Linear(1024, 14)` → Sigmoid.
-- **State-dict Compatibility**: 100% compatible with `test_nih/saved_models/nih_densenet121.pth`.
-- **XAI Target Layer**: `features` (final output: $1024 \times 7 \times 7$) — Grad-CAM and Grad-CAM++.
-- **Ensemble Weight**: 0.45 (dominant anchor model).
+- **Weights**: TorchXRayVision `densenet121-res224-all` (18 source outputs).
+- **Input**: Converted to XRV grayscale scaling and resized to 224 × 224.
+- **Outputs**: The 14 shared pathology scores are reordered to the service label list. `No_Finding` is derived as the complement; it is not an XRV-trained output.
+- **XAI Target Layer**: XRV DenseNet `features` output.
+- **Ensemble Weight**: 0.45 before normalization across loaded models.
 
 ### 2.2 ResNet-50 (`NIHResNet50`)
-- **Backbone**: 50-layer deep residual network → 4 bottleneck stages.
-- **Classification Head**: Adaptive Average Pooling → `nn.Linear(2048, 14)` → Sigmoid.
-- **XAI Target Layer**: `layer4` ($2048 \times 7 \times 7$) — Grad-CAM and Grad-CAM++.
-- **Ensemble Weight**: 0.25.
+- **Weights**: TorchXRayVision `resnet50-res512-all` (18 source outputs).
+- **Input**: Converted to XRV grayscale scaling and resized to 512 × 512.
+- **Outputs**: Same 14 pathology mapping and derived `No_Finding` score as DenseNet.
+- **XAI Target Layer**: XRV ResNet `layer4` output.
+- **Ensemble Weight**: 0.25 before normalization across loaded models.
 
 ### 2.3 Swin Transformer Tiny (`NIHSwin`)
 - **Backbone**: `swin_tiny_patch4_window7_224` via `timm`. Depths: [2, 2, 6, 2].
 - **Classification Head**: Norm → Adaptive Avg Pool → `nn.Linear(768, 14)` → Sigmoid.
 - **XAI**: Grad-CAM with Reshape Transform $(B, H, W, C) \to (B, C, H, W)$.
-- **Ensemble Weight**: 0.30.
+- **Ensemble Weight**: 0.30 before normalization; Swin-T is not loaded by production startup.
 
 ---
 
 ## 3. Phase 1 — Ensemble, TTA & Uncertainty
+
+> **Current serving configuration:** `app.py` loads a two-model ensemble: TorchXRayVision DenseNet-121 (`densenet121-res224-all`) and ResNet-50 (`resnet50-res512-all`). The default raw weights 0.45 and 0.25 are normalized across those two loaded models. Swin-T remains an optional research model and is not registered by the service startup. XRV weights are fetched and cached on first initialization. Both XRV models provide 18 outputs; the service maps the 14 shared findings and derives `No_Finding` because XRV has no trained output for that label.
 
 ### 3.1 Ensemble Inference Path
 
@@ -266,7 +269,7 @@ python scripts/retrain_all.py \
 ### 8.3 Checkpoint Safety Policy
 | Directory | Action |
 |---|---|
-| `test_nih/saved_models/` | **NEVER WRITTEN** — production checkpoint, read-only |
+| `test_nih/saved_models/` | Optional research checkpoints; not used by production inference |
 | `outputs/retrained/{model}/` | Written by retraining jobs only |
 | `outputs/onnx/` | Written by ONNX export jobs only |
 | `outputs/vlm/{model}_lora/` | Written by VLM fine-tuning jobs only |

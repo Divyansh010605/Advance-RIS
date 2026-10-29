@@ -8,7 +8,7 @@ if sys.stdout.encoding.lower() != 'utf-8':
 """
 NIH ChestX-ray14 Multi-Disease Chest X-Ray Screening & Report Generation AI Service.
 FastAPI Application — Phase 2 upgrade:
-  - Tri-Model Ensemble + TTA + Uncertainty (Phase 1)
+  - TorchXRayVision DenseNet-121 + ResNet-50 ensemble, TTA, and uncertainty
   - DICOM file upload endpoint
   - Async background job queue (submit → poll → retrieve)
   - ACR-style PDF report download endpoint
@@ -70,17 +70,12 @@ async def lifespan(app: FastAPI):
         model.load()
         logger.info(f"Model loaded with {model.num_classes} target classes.")
 
-        # Initialize Tri-Model Ensemble (defaults to DenseNet-121 + optional retrained models)
-        from pathlib import Path
+        # Initialize ensemble with the TorchXRayVision DenseNet checkpoint.
         ensemble = MultiModelEnsemble(num_classes=model.num_classes, classes=model.classes)
         ensemble.register_model("densenet121", model.net)
-
-        res_p = Path("outputs/retrained/resnet50/best_model.pth")
-        swin_p = Path("outputs/retrained/swin_tiny/best_model.pth")
-        ensemble.load_from_checkpoints(
-            resnet_path=str(res_p) if res_p.is_file() else None,
-            swin_path=str(swin_p) if swin_p.is_file() else None,
-        )
+        # Explicitly initialize the requested XRV ResNet-50 weights as the second model.
+        from src.models.resnet import NIHResNet50
+        ensemble.register_model("resnet50", NIHResNet50(num_classes=model.num_classes))
 
         vlm_generator = VLMReportGenerator(target_classes=model.classes)
         vlm_generator.load_vlm()

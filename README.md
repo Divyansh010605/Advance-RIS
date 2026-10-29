@@ -1,6 +1,6 @@
 # Multi-Disease Chest X-Ray Screening with Explainable AI & Automated Radiology Reports
 
-### 14-Class NIH ChestX-ray14 · Tri-Model Ensemble · Test-Time Augmentation · DICOM · VLM Instruction Tuning
+### NIH ChestX-ray14 · TorchXRayVision Ensemble · Test-Time Augmentation · DICOM · VLM Instruction Tuning
 
 [![FastAPI](https://img.shields.io/badge/API-FastAPI%200.115-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.2+-EE4C2C.svg?logo=pytorch&logoColor=white)](https://pytorch.org)
@@ -16,7 +16,7 @@
 This capstone system performs **multi-label thoracic pathology screening** on chest radiographs using an upgraded multi-model architecture benchmarked on the **NIH ChestX-ray14** dataset (112,120 frontal-view radiographs, 14 thoracic findings).
 
 The platform integrates:
-1. **Tri-Model Soft-Voting Ensemble** combining **DenseNet-121**, **ResNet-50**, and **Swin Transformer (Swin-T)**.
+1. **Two-Model Soft-Voting Ensemble** combining TorchXRayVision **DenseNet-121** and **ResNet-50** pretrained weights.
 2. **Test-Time Augmentation (TTA)** & **Predictive Uncertainty Quantification** (standard deviation, 95% confidence intervals, and high-uncertainty clinician flags).
 3. **ONNX Runtime Acceleration Engine** achieving sub-35ms inference latency.
 4. **Server-Side DICOM Ingestion** with Window Center/Width windowing and MONOCHROME1 inversion.
@@ -26,6 +26,8 @@ The platform integrates:
 
 > [!IMPORTANT]
 > **Research & Educational Disclaimer**: This software is developed strictly for research, educational, and capstone evaluation purposes. It is **NOT** a certified medical diagnostic system (FDA/CE marked) and must not replace professional clinical diagnosis by a licensed radiologist.
+
+The inference service loads TorchXRayVision weights `densenet121-res224-all` and `resnet50-res512-all`, downloading them on first initialization and caching them locally. It maps the 14 shared pathology scores into the service's labels; `No_Finding` is derived as the complement because neither XRV model has a trained `No Finding` output. Swin-T remains available for research experiments but is not loaded by the production service.
 
 ---
 
@@ -46,8 +48,8 @@ The platform integrates:
   ┌────────────────────────────────────────────────────────────────────────┐
   │                         CORE CAPABILITIES                              │
   ├────────────────────────────┬───────────────────────────────────────────┤
-  │ Tri-Model Ensemble         │ DenseNet-121 (0.45) + Swin-T (0.30) +     │
-  │                            │ ResNet-50 (0.25) with dynamic fallback    │
+  │ XRV Ensemble               │ DenseNet-121 (0.45) + ResNet-50 (0.25),   │
+  │                            │ normalized over loaded models             │
   ├────────────────────────────┼───────────────────────────────────────────┤
   │ Test-Time Augmentation     │ 4 passes (Identity, Flip, Zoom, Contrast) │
   ├────────────────────────────┼───────────────────────────────────────────┤
@@ -99,8 +101,7 @@ The platform integrates:
 
 ### 1. Clone & Configure Environment
 ```bash
-git clone https://github.com/Divyansh-programmer-35/Capstone-1.git
-cd Capstone-1
+git clone https://github.com/Divyansh010605/Advance-RIS.git
 ```
 
 ### 2. Build & Launch Containers
@@ -165,7 +166,7 @@ python scripts/retrain_all.py \
     --image_dir /path/to/nih/images/ \
     --output_dir outputs/retrained/
 ```
-> *Safety Policy*: Retraining writes strictly to `outputs/retrained/` and never mutates production checkpoints in `test_nih/saved_models/`.
+> Retraining writes checkpoints under `outputs/retrained/`. Production inference uses the TorchXRayVision weights above and does not load the legacy `test_nih/saved_models/nih_densenet121.pth` checkpoint.
 
 ### 2. Individual Model Training
 ```bash
@@ -182,7 +183,7 @@ python -m src.train --config configs/swin_tiny.yaml
 ### 3. Standalone ONNX Export
 ```bash
 python scripts/export_onnx.py --model densenet121 \
-    --weights test_nih/saved_models/nih_densenet121.pth \
+    --weights outputs/retrained/densenet121/best_model.pth \
     --output outputs/onnx/densenet121.onnx
 ```
 
@@ -190,14 +191,14 @@ python scripts/export_onnx.py --model densenet121 \
 ```bash
 # AUROC, F1, Sensitivity, Specificity
 python -m src.eval.metrics \
-    --model_path test_nih/saved_models/nih_densenet121.pth \
+    --model_path outputs/retrained/densenet121/best_model.pth \
     --model_type densenet121 \
     --test_csv test_nih/Data_Entry_2017_v2020.csv \
     --image_dir /path/to/images/
 
 # Bounding box pointing game & IoU
 python -m src.eval.xai_eval \
-    --model_path test_nih/saved_models/nih_densenet121.pth \
+    --model_path outputs/retrained/densenet121/best_model.pth \
     --model_type densenet121 \
     --bbox_csv test_nih/BBox_List_2017.csv \
     --image_dir /path/to/images/ \
@@ -246,7 +247,7 @@ python -m src.eval.vlm_eval \
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/v1/analyze` | Standard & Ensemble inference + TTA + Uncertainty + Grad-CAM + Report |
-| `POST` | `/api/v1/ensemble/analyze` | Dedicated tri-model ensemble analysis endpoint |
+| `POST` | `/api/v1/ensemble/analyze` | Dedicated DenseNet-121 + ResNet-50 ensemble analysis endpoint |
 | `POST` | `/api/v1/dicom/upload` | Multipart DICOM upload (`.dcm`), windowing, metadata extraction |
 | `POST` | `/api/v1/jobs/submit` | Submit analysis task for background async execution |
 | `GET` | `/api/v1/jobs/{job_id}` | Poll background job status and diagnostic results |
@@ -286,9 +287,8 @@ Capstone-1/
 │   ├── app.py                        # FastAPI production service entry point
 │   ├── configs/                      # base.yaml, densenet121.yaml, resnet50.yaml, swin_tiny.yaml
 │   ├── models/                       # densenet_multilabel.py, nih_model.py, tb_model.py
-│   ├── test_nih/
-│   │   └── saved_models/
-│   │       └── nih_densenet121.pth   # Verified production checkpoint (14 classes)
+│   ├── test_nih/  # Optional dataset and research checkpoints
+
 │   ├── outputs/                      # Saved retraining runs, ONNX models, eval reports
 │   ├── scripts/                      # retrain_all.py, export_onnx.py, retrain_all.sh/ps1
 │   ├── report_generation/            # pdf_report.py, generator.py, vlm_report.py

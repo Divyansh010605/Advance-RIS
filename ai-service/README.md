@@ -6,6 +6,8 @@ Clean, reproducible multi-label classification, explainable AI (Grad-CAM / Grad-
 
 ## 1. Setup & Installation
 
+Production inference uses TorchXRayVision weights `densenet121-res224-all` and `resnet50-res512-all`. They are downloaded and cached by TorchXRayVision on first startup; the NIH dataset and `nih_densenet121.pth` checkpoint are not required for serving.
+
 ### Prerequisites
 - Python 3.10 or 3.11
 - NVIDIA GPU with CUDA recommended for training; CPU supported for inference and dry-run tests.
@@ -27,8 +29,7 @@ ai-service/
 └── test_nih/
     ├── Data_Entry_2017_v2020.csv      # Metadata labels
     ├── images/                        # All extracted PNG images (e.g. 00000001_000.png)
-    └── saved_models/
-        └── nih_densenet121.pth        # Production checkpoint (~85 MB)
+    └── saved_models/                  # Optional local research checkpoints
 ```
 *(Nested image folders such as `images_001/images/` are also automatically indexed).*
 
@@ -72,9 +73,8 @@ python -m src.train --config configs/densenet121.yaml --dry-run
 Evaluate localization accuracy (Pointing Game Accuracy and Bounding Box IoU) against `BBox_List_2017.csv`:
 
 ```bash
-# Evaluate existing DenseNet-121 checkpoint
+# Evaluate with the configured XRV DenseNet weights
 python -m src.eval.xai_eval \
-    --model_path test_nih/saved_models/nih_densenet121.pth \
     --architecture densenet121 \
     --bbox_csv test_nih/BBox_List_2017.csv \
     --method gradcam++

@@ -32,15 +32,14 @@ LABEL maintainer="NIH Multi-Disease AI Team"
 LABEL build-version="2026-10-NIH-v2.2.0"
 COPY . .
 
-# Ensure required runtime, model, and output directories exist
-RUN mkdir -p /app/test_nih/saved_models \
-             /app/outputs/onnx \
+# Ensure required runtime and output directories exist
+RUN mkdir -p /app/outputs/onnx \
              /app/outputs/retrained \
              /app/outputs/vlm
 
 EXPOSE 8000
 
-# Healthcheck – allows start-period for PyTorch & DenseNet cold load
+# Healthcheck – allows start-period for PyTorch and pretrained model downloads
 HEALTHCHECK --interval=15s --timeout=10s --start-period=60s --retries=5 \
     CMD curl -f http://localhost:8000/health || exit 1
 

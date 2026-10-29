@@ -41,7 +41,11 @@ This document details the architectural, methodological, and engineering decisio
 
 ---
 
-## 4. Input Resolution
+## Current implementation update
+
+> **Current implementation update (2026-10):** The production service now uses TorchXRayVision `densenet121-res224-all` and `resnet50-res512-all`. Earlier decisions below describe the previous torchvision/custom-checkpoint setup and are historical. Serving no longer loads the local NIH DenseNet checkpoint. XRV downloads and caches its weights on startup. The models share 14 pathology outputs; `No_Finding` is derived because neither has a trained output for it. The production ensemble registers DenseNet and ResNet only; Swin-T is not loaded.
+
+## 4. Input Resolution (historical)
 
 - **Chosen**: $224 \times 224$ pixels.
 - **Alternatives Considered**:
@@ -255,3 +259,7 @@ python -m src.vlm.trainer --vlm biomedgpt \
     --image_dir /data/images/ \
     --epochs 3
 ```
+
+## 16. Production Inference Weight Update (TorchXRayVision)
+
+Production inference now loads TorchXRayVision DenseNet-121 `densenet121-res224-all` and ResNet-50 `resnet50-res512-all`. TorchXRayVision downloads and caches the weights on first startup; the former local `test_nih/saved_models/nih_densenet121.pth` is not used by serving. The service maps the 14 pathology outputs into its configured class order and derives `No_Finding` as a complement because these XRV models do not provide a trained output for that label. In the currently loaded two-model ensemble, raw weights 0.45 and 0.25 are normalized to sum to one. Swin-T remains available for research training and is not loaded by the production startup.

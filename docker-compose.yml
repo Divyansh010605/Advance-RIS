@@ -36,12 +36,11 @@ services:
     container_name: ai-service
     restart: unless-stopped
     environment:
-      MODEL_PATH: /app/test_nih/saved_models/nih_densenet121.pth
       CONFIG_DIR: /app/configs
       LOG_LEVEL: info
     volumes:
-      # Mount host model directory (contains nih_densenet121.pth)
-      - ${MODEL_HOST_PATH:-./ai-service/test_nih/saved_models}:/app/test_nih/saved_models
+      # Persist TorchXRayVision pretrained model downloads across container rebuilds
+      - ${XRV_CACHE_PATH:-./xrv-cache}:/root/.torchxrayvision
       # Persist retrained checkpoints and exported ONNX models
       - ./ai-service/outputs:/app/outputs
     networks:

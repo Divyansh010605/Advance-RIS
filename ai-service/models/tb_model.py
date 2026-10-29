@@ -1,8 +1,7 @@
 """
 Unified Model Manager for NIH ChestX-ray14 Multi-Disease Chest X-Ray Screening.
 
-Loads the DenseNet-121 model trained on NIH ChestX-ray14 (14 pathology classes)
-and class-level detection thresholds.
+Loads the TorchXRayVision DenseNet-121 model and class-level detection thresholds.
 """
 import json
 import logging
@@ -16,14 +15,7 @@ from models.densenet_multilabel import MultiDiseaseModel
 logger = logging.getLogger(__name__)
 
 # ── Path resolution ────────────────────────────────────────────────────────────
-# Default model path points at the NIH trained checkpoint.
-# Override at runtime via the MODEL_PATH environment variable.
-_HERE = os.path.dirname(__file__)
-_DEFAULT_MODEL = os.path.join(
-    _HERE, "..", "test_nih", "saved_models", "nih_densenet121.pth"
-)
-MODEL_PATH   = os.getenv("MODEL_PATH", _DEFAULT_MODEL)
-CONFIG_DIR   = os.getenv("CONFIG_DIR", os.path.join(_HERE, "..", "configs"))
+CONFIG_DIR   = os.getenv("CONFIG_DIR", os.path.join(os.path.dirname(__file__), "..", "configs"))
 CLASSES_FILE    = os.path.join(CONFIG_DIR, "classes.json")
 THRESHOLDS_FILE = os.path.join(CONFIG_DIR, "thresholds.json")
 
@@ -67,10 +59,9 @@ class TBModel:
 
     # ── Model load ─────────────────────────────────────────────────────────────
     def load(self):
-        logger.info(f"Loading NIH DenseNet-121 from: {MODEL_PATH}")
+        logger.info("Loading TorchXRayVision DenseNet-121 weights: densenet121-res224-all")
         self._model = MultiDiseaseModel(
             num_classes=self.num_classes,
-            model_path=MODEL_PATH,
         )
         self._model.load()
 
