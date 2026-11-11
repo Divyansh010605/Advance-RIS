@@ -1,4 +1,5 @@
 import base64
+import math
 from io import BytesIO
 from typing import Dict, List, Optional, Tuple
 
@@ -8,12 +9,27 @@ import torch
 from PIL import Image
 
 
+def ensure_spatial_fmaps(fmaps: torch.Tensor, grads: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Ensures feature maps and gradients are in (B, C, H, W) spatial format."""
+    if fmaps.dim() == 4 and fmaps.shape[1] == fmaps.shape[2] and fmaps.shape[3] > fmaps.shape[1]:
+        fmaps = fmaps.permute(0, 3, 1, 2).contiguous()
+        grads = grads.permute(0, 3, 1, 2).contiguous()
+    elif fmaps.dim() == 3:
+        b, l, c = fmaps.shape
+        side = int(math.isqrt(l))
+        if side * side == l:
+            fmaps = fmaps.view(b, side, side, c).permute(0, 3, 1, 2).contiguous()
+            grads = grads.view(b, side, side, c).permute(0, 3, 1, 2).contiguous()
+    return fmaps, grads
+
+
 def compute_gradcam(feature_maps: torch.Tensor, gradients: torch.Tensor) -> np.ndarray:
     """
     Standard Grad-CAM:
     alpha_k = mean(gradients_k)
     L_c = relu(sum(alpha_k * A_k))
     """
+    feature_maps, gradients = ensure_spatial_fmaps(feature_maps, gradients)
     weights = gradients.mean(dim=[2, 3], keepdim=True)
     cam = (weights * feature_maps).sum(dim=1, keepdim=False)
     cam = torch.relu(cam).squeeze().detach().cpu().numpy()
@@ -33,6 +49,7 @@ def compute_gradcam_plus_plus(feature_maps: torch.Tensor, gradients: torch.Tenso
     w_k = sum_ij(alpha_ij^kc * relu(grad_ij))
     L_c = relu(sum(w_k * A_k))
     """
+    feature_maps, gradients = ensure_spatial_fmaps(feature_maps, gradients)
     grad = gradients
     fmap = feature_maps
 

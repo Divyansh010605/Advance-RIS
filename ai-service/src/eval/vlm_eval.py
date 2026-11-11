@@ -53,9 +53,9 @@ def parse_findings_from_text(text: str) -> List[str]:
                 if cls.lower().replace("_", " ") == label_raw or cls.lower() == label_raw:
                     explicit_negatives.add(cls)
 
-    # Strategy 1: Direct name matching (skip explicit negatives)
+    # Strategy 1: Direct name matching (skip explicit negatives and No_Finding)
     for cls in NIH_CLASSES:
-        if cls in explicit_negatives:
+        if cls == "No_Finding" or cls in explicit_negatives:
             continue
         cls_lower = cls.lower().replace("_", " ")
         if cls_lower in text_lower:
@@ -70,6 +70,8 @@ def parse_findings_from_text(text: str) -> List[str]:
         if status == "positive":
             # Normalize label → NIH class
             for cls in NIH_CLASSES:
+                if cls == "No_Finding":
+                    continue
                 if cls.lower().replace("_", " ") == label or cls.lower() == label:
                     if cls not in found:
                         found.append(cls)
@@ -82,6 +84,8 @@ def parse_findings_from_text(text: str) -> List[str]:
             for item in raw_list.split(","):
                 item = item.strip()
                 for cls in NIH_CLASSES:
+                    if cls == "No_Finding":
+                        continue
                     if cls.lower().replace("_", " ") == item or cls.lower() == item:
                         if cls not in found:
                             found.append(cls)

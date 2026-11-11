@@ -1,6 +1,8 @@
 """TorchXRayVision DenseNet-121 inference adapter for NIH label order."""
 import logging
-from typing import Dict, List, Tuple
+import os
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -11,6 +13,8 @@ logger = logging.getLogger(__name__)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 XRV_DENSENET_WEIGHTS = "densenet121-res224-all"
+DEFAULT_DENSENET_CKPT = Path(__file__).resolve().parent.parent / "outputs" / "retrained" / "densenet121" / "densenet121_cxr.pth"
+
 NIH_LABELS = [
     "Atelectasis", "Cardiomegaly", "Effusion", "Infiltration", "Mass",
     "Nodule", "Pneumonia", "Pneumothorax", "Consolidation", "Edema",
@@ -33,15 +37,31 @@ def _to_xrv_input(x: torch.Tensor, size: int) -> torch.Tensor:
 
 
 class NIHDenseNet(nn.Module):
-    """XRV DenseNet wrapper preserving the service's `(scores, feature_maps)` API."""
-    def __init__(self, num_classes: int = 15, pretrained: bool = True):
+    """XRV DenseNet wrapper supporting retrained weights and preserving (scores, feature_maps) API."""
+    def __init__(self, num_classes: int = 15, pretrained: bool = True, weights_path: Optional[str | Path] = None):
         super().__init__()
-        if num_classes != len(NIH_LABELS):
-            raise ValueError(f"Expected {len(NIH_LABELS)} NIH outputs, got {num_classes}")
+        if num_classes not in (14, 15):
+            raise ValueError(f"Expected 14 or 15 NIH outputs, got {num_classes}")
         self.num_classes = num_classes
-        # This service is configured to use the requested pretrained XRV weights.
-        self.xrv_model = xrv.models.DenseNet(weights=XRV_DENSENET_WEIGHTS, apply_sigmoid=False)
         self.xrv_probabilities = True
+
+        ckpt_file = Path(weights_path) if weights_path else DEFAULT_DENSENET_CKPT
+        if ckpt_file and ckpt_file.is_file():
+            logger.info("Loading retrained DenseNet-121 weights from: %s", ckpt_file)
+            self.xrv_model = xrv.models.DenseNet(weights=None, op_threshs=torch.empty(18), apply_sigmoid=False)
+            self.xrv_model.pathologies = xrv.models.model_urls[XRV_DENSENET_WEIGHTS]["labels"]
+            state_dict = torch.load(str(ckpt_file), map_location="cpu", weights_only=False)
+            if isinstance(state_dict, dict) and "state_dict" in state_dict:
+                state_dict = state_dict["state_dict"]
+            elif isinstance(state_dict, dict) and "model_state_dict" in state_dict:
+                state_dict = state_dict["model_state_dict"]
+            self.xrv_model.load_state_dict(state_dict)
+            self.weights_path = str(ckpt_file)
+        else:
+            logger.info("Loading TorchXRayVision DenseNet-121 weights: %s", XRV_DENSENET_WEIGHTS)
+            self.xrv_model = xrv.models.DenseNet(weights=XRV_DENSENET_WEIGHTS, apply_sigmoid=False)
+            self.weights_path = XRV_DENSENET_WEIGHTS
+
         self.features = self.xrv_model.features
         self.classifier = self.xrv_model.classifier
         self.pathology_indices = [self.xrv_model.pathologies.index(label) for label in NIH_LABELS[:-1]]
@@ -57,16 +77,16 @@ class NIHDenseNet(nn.Module):
         self._feature_maps = fmaps
         pooled = F.adaptive_avg_pool2d(fmaps, (1, 1)).flatten(1)
         raw = torch.sigmoid(self.classifier(pooled))
-        # Match TorchXRayVision's normal forward path, including its trained thresholds.
         scores = xrv.models.op_norm(raw, self.xrv_model.op_threshs)
         selected = scores[:, self.pathology_indices]
-        # TorchXRayVision does not train a "No Finding" output; expose a derived complement.
-        no_finding = (1.0 - selected).clamp(0, 1).prod(dim=1, keepdim=True)
-        return torch.cat((selected, no_finding), dim=1), fmaps
+        if self.num_classes == 15:
+            no_finding = (1.0 - selected).clamp(0, 1).prod(dim=1, keepdim=True)
+            return torch.cat((selected, no_finding), dim=1), fmaps
+        return selected, fmaps
 
 
 class MultiDiseaseModel:
-    """Load XRV pretrained weights and expose inference/Grad-CAM helpers."""
+    """Load retrained or XRV weights and expose inference/Grad-CAM helpers."""
     def __init__(self, num_classes: int, model_path: str = None, pretrained: bool = True):
         self.device = DEVICE
         self.num_classes = num_classes
@@ -75,9 +95,11 @@ class MultiDiseaseModel:
         self.net: NIHDenseNet | None = None
 
     def load(self):
-        self.net = NIHDenseNet(self.num_classes, pretrained=self.pretrained).to(self.device).eval()
-        if self.model_path:
-            logger.warning("Ignoring incompatible local checkpoint %s; using TorchXRayVision %s", self.model_path, XRV_DENSENET_WEIGHTS)
+        self.net = NIHDenseNet(
+            self.num_classes,
+            pretrained=self.pretrained,
+            weights_path=self.model_path,
+        ).to(self.device).eval()
 
     def predict_with_gradients(self, image_tensor: torch.Tensor, target_indices: List[int]):
         if self.net is None:

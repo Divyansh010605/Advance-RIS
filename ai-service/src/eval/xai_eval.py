@@ -229,8 +229,8 @@ def evaluate_xai_on_records(
 
 def main():
     parser = argparse.ArgumentParser(description="Evaluate XAI (Grad-CAM / Grad-CAM++) against NIH BBoxes")
-    parser.add_argument("--model_path", type=str, default="test_nih/saved_models/nih_densenet121.pth")
-    parser.add_argument("--architecture", type=str, default="densenet121", choices=["densenet121", "resnet50", "swin_tiny"])
+    parser.add_argument("--model_path", type=str, default=None, help="Path to model checkpoint")
+    parser.add_argument("--architecture", type=str, default="densenet121", choices=["densenet121", "resnet50", "swin", "swin_large", "swin_base", "swin_tiny"])
     parser.add_argument("--bbox_csv", type=str, default=None, help="Path to BBox_List_2017.csv")
     parser.add_argument("--images_dir", type=str, default="test_nih/images")
     parser.add_argument("--output_dir", type=str, default="outputs/xai_eval")
@@ -243,24 +243,44 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     num_classes = len(NIH_CLASSES)
+
+    # Resolve default retrained checkpoint paths if not provided
+    ckpt = args.model_path
+    if not ckpt:
+        if args.architecture == "densenet121":
+            default_candidate = Path("outputs/retrained/densenet121/densenet121_cxr.pth")
+            if default_candidate.is_file():
+                ckpt = str(default_candidate)
+        elif args.architecture == "resnet50":
+            default_candidate = Path("outputs/retrained/resnet50/resnet50_cxr.pth")
+            if default_candidate.is_file():
+                ckpt = str(default_candidate)
+        else:
+            for cand in [
+                Path("outputs/retrained/swin/pretrained_SwinCheX_classifier.pth"),
+                Path("outputs/retrained/swin/swin_base_cxr14.pth"),
+                Path("outputs/retrained/swin/best_model.pth"),
+            ]:
+                if cand.is_file():
+                    ckpt = str(cand)
+                    break
+
     # 1. Build Model
     if args.architecture == "densenet121":
         from src.models.densenet import build_densenet121
-        model = build_densenet121(num_classes=num_classes, pretrained=False)
+        model = build_densenet121(num_classes=num_classes, pretrained=False, weights_path=ckpt)
     elif args.architecture == "resnet50":
         from src.models.resnet import build_resnet50
-        model = build_resnet50(num_classes=num_classes, pretrained=False)
+        model = build_resnet50(num_classes=num_classes, pretrained=False, weights_path=ckpt)
     else:
-        from src.models.swin import build_swin_tiny
-        model = build_swin_tiny(num_classes=num_classes, pretrained=False)
+        from src.models.swin import build_swin
+        model = build_swin(num_classes=num_classes, pretrained=True, weights_path=ckpt)
 
     model.to(device)
-
-    # Load weights if checkpoint exists
-    if os.path.isfile(args.model_path):
-        load_checkpoint(model, args.model_path, device=device, strict=False)
+    if ckpt and os.path.isfile(ckpt):
+        logger.info("Evaluating %s with weights from: %s", args.architecture, ckpt)
     else:
-        logger.warning("Checkpoint %s not found. Evaluating with initialized weights.", args.model_path)
+        logger.warning("No checkpoint found for %s. Evaluating with initialized weights.", args.architecture)
 
     # 2. Parse or mock BBox records
     images_path = Path(args.images_dir) if os.path.isdir(args.images_dir) else None

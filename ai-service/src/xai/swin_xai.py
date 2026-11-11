@@ -16,12 +16,15 @@ def swin_reshape_transform(tensor: torch.Tensor) -> torch.Tensor:
       - (B, L, C)    -> (B, sqrt(L), sqrt(L), C) -> (B, C, sqrt(L), sqrt(L))
     """
     if tensor.dim() == 4:
+        # If already (B, C, H, W) where C >> H and C >> W
+        if tensor.shape[1] > tensor.shape[2] and tensor.shape[1] > tensor.shape[3]:
+            return tensor
         # (B, H, W, C) -> (B, C, H, W)
         return tensor.permute(0, 3, 1, 2).contiguous()
     elif tensor.dim() == 3:
         # (B, L, C) -> (B, H, W, C) -> (B, C, H, W)
         b, l, c = tensor.shape
-        side = int(math.sqrt(l))
+        side = int(math.isqrt(l))
         assert side * side == l, f"Sequence length {l} is not a perfect square"
         reshaped = tensor.view(b, side, side, c)
         return reshaped.permute(0, 3, 1, 2).contiguous()

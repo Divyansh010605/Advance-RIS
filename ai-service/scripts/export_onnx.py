@@ -14,8 +14,8 @@ if str(AI_SERVICE_DIR) not in sys.path:
 
 from src.models.checkpoint import load_checkpoint
 from src.models.densenet import build_densenet121
-from src.models.resnet import NIHResNet50
-from src.models.swin import build_swin_tiny
+from src.models.resnet import build_resnet50, NIHResNet50
+from src.models.swin import build_swin, NIHSwin
 from src.models.onnx_engine import export_model_to_onnx, ONNXInferenceEngine, benchmark_inference
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -28,13 +28,13 @@ def main():
         "--model",
         type=str,
         default="densenet121",
-        choices=["densenet121", "resnet50", "swin_tiny", "all"],
+        choices=["densenet121", "resnet50", "swin", "swin_tiny", "all"],
         help="Model architecture to export.",
     )
     parser.add_argument(
         "--checkpoint",
         type=str,
-        default="test_nih/saved_models/nih_densenet121.pth",
+        default=None,
         help="Path to trained PyTorch checkpoint (.pth).",
     )
     parser.add_argument(
@@ -54,7 +54,7 @@ def main():
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    models_to_export = ["densenet121", "resnet50", "swin_tiny"] if args.model == "all" else [args.model]
+    models_to_export = ["densenet121", "resnet50", "swin"] if args.model == "all" else [args.model]
 
     for m_name in models_to_export:
         print(f"\n=======================================================")
@@ -62,20 +62,29 @@ def main():
         print(f"=======================================================")
 
         if m_name == "densenet121":
-            net = build_densenet121(num_classes=14, pretrained=False)
-            ckpt_path = args.checkpoint if Path(args.checkpoint).is_file() else None
+            default_ckpt = Path("outputs/retrained/densenet121/densenet121_cxr.pth")
+            ckpt_path = args.checkpoint or (str(default_ckpt) if default_ckpt.is_file() else None)
+            net = build_densenet121(num_classes=14, pretrained=False, weights_path=ckpt_path)
         elif m_name == "resnet50":
-            net = NIHResNet50(num_classes=14, pretrained=False)
-            res_path = Path("outputs/retrained/resnet50/best_model.pth")
-            ckpt_path = str(res_path) if res_path.is_file() else None
-        else:  # swin_tiny
-            net = build_swin_tiny(num_classes=14, pretrained=False)
-            swin_path = Path("outputs/retrained/swin_tiny/best_model.pth")
-            ckpt_path = str(swin_path) if swin_path.is_file() else None
+            default_ckpt = Path("outputs/retrained/resnet50/resnet50_cxr.pth")
+            ckpt_path = args.checkpoint or (str(default_ckpt) if default_ckpt.is_file() else None)
+            net = build_resnet50(num_classes=14, pretrained=False, weights_path=ckpt_path)
+        else:  # swin
+            candidates = [
+                Path("outputs/retrained/swin/pretrained_SwinCheX_classifier.pth"),
+                Path("outputs/retrained/swin/swin_base_cxr14.pth"),
+                Path("outputs/retrained/swin/best_model.pth"),
+            ]
+            ckpt_path = args.checkpoint
+            if not ckpt_path:
+                for c in candidates:
+                    if c.is_file():
+                        ckpt_path = str(c)
+                        break
+            net = build_swin(num_classes=14, pretrained=True, weights_path=ckpt_path)
 
         if ckpt_path and Path(ckpt_path).is_file():
-            logger.info("Loading weights from %s...", ckpt_path)
-            load_checkpoint(net, ckpt_path, map_location="cpu")
+            logger.info("Exporting %s using checkpoint: %s", m_name, ckpt_path)
         else:
             logger.warning("No checkpoint found for %s, exporting architecture with initialized weights.", m_name)
 

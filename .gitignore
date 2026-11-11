@@ -1,6 +1,6 @@
 # ===============================================================================
-# NIH ChestX-ray14 Multi-Disease AI Service — Public Repository .gitignore
-# Prevents exposure of secrets, medical data (PHI), large models, and build artifacts
+# NIH ChestX-ray14 Multi-Disease AI Service & RIS — Comprehensive .gitignore
+# Prevents exposure of secrets, PHI, model weights, datasets, build artifacts, and caches
 # ===============================================================================
 
 # ── 1. Security, Secrets & Environment Variables ──────────────────────────────
@@ -20,15 +20,16 @@ token.json
 *.token
 
 # ── 2. Medical Data & Protected Health Information (PHI) ─────────────────────
-# Raw DICOM images and clinical study uploads must never be committed publicly
+# Raw DICOM images and clinical study uploads must never be committed
 *.dcm
 *.dicom
 uploads/
 Backend/uploads/
 ai-service/uploads/
+frontend/uploads/
 
 # ── 3. Datasets & Raw Image Archives ──────────────────────────────────────────
-# Download datasets separately using DATASET_SETUP.md
+# NIH ChestX-ray14 and related clinical datasets
 datasets/
 data/
 ai-service/datasets/
@@ -41,13 +42,16 @@ archive/
 *.7z
 *.rar
 
-# Large NIH metadata CSVs (re-download from NIH ChestX-ray14 repository)
+# NIH metadata CSVs and test datasets
 Data_Entry_*.csv
 BBox_List_*.csv
-ai-service/test_nih/Data_Entry_2017_v2020.csv
+ai-service/test_nih/Data_Entry_*.csv
+ai-service/test_nih/BBox_List_*.csv
+ai-service/test_nih/images/
+test_nih/images/
 
 # ── 4. Heavy Machine Learning Artifacts & Model Checkpoints ───────────────────
-# Checkpoints & ONNX exports (GitHub rejects single files >100MB)
+# Checkpoints & ONNX exports (exceed standard git limits; manage via Git LFS if needed)
 *.pth
 *.pt
 *.ckpt
@@ -57,19 +61,19 @@ ai-service/test_nih/Data_Entry_2017_v2020.csv
 *.pb
 *.tflite
 *.onnx
-ai-service/test.onnx
-ai-service/test2.onnx
 
 # Training runs, retrained weights, and evaluation outputs
 outputs/
 ai-service/outputs/
 report_generation/vlm_weights/
 ai-service/report_generation/vlm_weights/
+test_nih/saved_models/
+ai-service/test_nih/saved_models/
 
-# If keeping the base pre-trained DenseNet checkpoint in git via LFS or direct commit,
-# uncomment the two lines below:
-# !ai-service/test_nih/saved_models/
-# !ai-service/test_nih/saved_models/nih_densenet121.pth
+# Incomplete / temporary downloads
+*.part
+*.crdownload
+*.incomplete
 
 # ── 5. Node.js & Frontend Artifacts ───────────────────────────────────────────
 node_modules/
@@ -96,13 +100,14 @@ __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+ai-service/.pytest_cache/
 .coverage
 coverage/
 htmlcov/
 .hypothesis/
 .ipynb_checkpoints/
-*.crdownload
 *.tmp
+*.temp
 
 # ── 7. Databases & Container Volumes ──────────────────────────────────────────
 data/db/
@@ -129,3 +134,4 @@ desktop.ini
 *.sublime-workspace
 .system_generated/
 .antigravity/
+brain/

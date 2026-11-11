@@ -10,8 +10,10 @@ report_generation/vlm_weights/
 *.safetensors
 *.zip
 *.tar.gz
-test.onnx
-test2.onnx
+*.onnx
+*.pth
+*.pt
+*.ckpt
 
 # Explicitly preserve NIH production checkpoint
 !test_nih/saved_models/

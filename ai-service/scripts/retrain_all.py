@@ -38,12 +38,14 @@ logger = logging.getLogger("retrain_all")
 MODEL_CONFIGS = {
     "densenet121": "configs/densenet121.yaml",
     "resnet50":    "configs/resnet50.yaml",
+    "swin":        "configs/swin.yaml",
     "swin_tiny":   "configs/swin_tiny.yaml",
 }
 
 ONNX_EXPORTS = {
     "densenet121": ("densenet121", "outputs/onnx/densenet121.onnx"),
     "resnet50":    ("resnet50",    "outputs/onnx/resnet50.onnx"),
+    "swin":        ("swin",        "outputs/onnx/swin.onnx"),
     "swin_tiny":   ("swin_tiny",   "outputs/onnx/swin_tiny.onnx"),
 }
 

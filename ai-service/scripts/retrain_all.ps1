@@ -13,9 +13,9 @@ python -m src.train --config configs/densenet121.yaml
 Write-Host "`n[2/3] Retraining ResNet-50..." -ForegroundColor Yellow
 python -m src.train --config configs/resnet50.yaml
 
-# 3. Swin Transformer Tiny
-Write-Host "`n[3/3] Retraining Swin Transformer Tiny..." -ForegroundColor Yellow
-python -m src.train --config configs/swin_tiny.yaml
+# 3. Swin Transformer (SwinCheX)
+Write-Host "`n[3/3] Retraining Swin Transformer (SwinCheX)..." -ForegroundColor Yellow
+python -m src.train --config configs/swin.yaml
 
 Write-Host "`n==========================================================" -ForegroundColor Green
 Write-Host "All retraining jobs completed successfully!" -ForegroundColor Green

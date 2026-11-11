@@ -43,7 +43,7 @@ This document details the architectural, methodological, and engineering decisio
 
 ## Current implementation update
 
-> **Current implementation update (2026-10):** The production service now uses TorchXRayVision `densenet121-res224-all` and `resnet50-res512-all`. Earlier decisions below describe the previous torchvision/custom-checkpoint setup and are historical. Serving no longer loads the local NIH DenseNet checkpoint. XRV downloads and caches its weights on startup. The models share 14 pathology outputs; `No_Finding` is derived because neither has a trained output for it. The production ensemble registers DenseNet and ResNet only; Swin-T is not loaded.
+> **Current implementation update:** The production service now uses retrained checkpoints located in `outputs/retrained/` (DenseNet-121, ResNet-50, and SwinCheX based on rajaatreja/SwinCheX_Classifier `swin_large_patch4_window7_224`). The production ensemble registers all three backbones with weights: DenseNet 0.40, SwinCheX 0.35, ResNet-50 0.25. The models share 14 pathology outputs, and derive `No_Finding` as the joint negative complement. Both CNN and Swin architectures are supported across all XAI methods (Grad-CAM and Grad-CAM++).
 
 ## 4. Input Resolution (historical)
 

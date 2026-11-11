@@ -70,12 +70,12 @@ async def lifespan(app: FastAPI):
         model.load()
         logger.info(f"Model loaded with {model.num_classes} target classes.")
 
-        # Initialize ensemble with the TorchXRayVision DenseNet checkpoint.
+        # Initialize full 3-backbone ensemble (DenseNet-121, ResNet-50, SwinCheX) with retrained weights
         ensemble = MultiModelEnsemble(num_classes=model.num_classes, classes=model.classes)
-        ensemble.register_model("densenet121", model.net)
-        # Explicitly initialize the requested XRV ResNet-50 weights as the second model.
-        from src.models.resnet import NIHResNet50
-        ensemble.register_model("resnet50", NIHResNet50(num_classes=model.num_classes))
+        if model.net is not None:
+            ensemble.register_model("densenet121", model.net)
+        ensemble.load_from_checkpoints()
+        logger.info("Active ensemble models: %s", list(ensemble.models.keys()))
 
         vlm_generator = VLMReportGenerator(target_classes=model.classes)
         vlm_generator.load_vlm()

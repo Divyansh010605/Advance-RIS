@@ -79,8 +79,12 @@ def build_model(model_cfg: Dict[str, Any], num_classes: int) -> torch.nn.Module:
         from src.models.resnet import build_resnet50
         return build_resnet50(num_classes=num_classes, pretrained=pretrained)
     elif "swin" in arch:
-        from src.models.swin import build_swin_tiny
-        return build_swin_tiny(num_classes=num_classes, pretrained=pretrained)
+        from src.models.swin import build_swin
+        return build_swin(
+            num_classes=num_classes,
+            architecture=model_cfg.get("architecture", "swin_large_patch4_window7_224"),
+            pretrained=pretrained,
+        )
     else:
         raise ValueError(f"Unsupported model architecture: {arch}")
 

@@ -14,8 +14,8 @@ import torch.nn.functional as F
 from src.data.dataset import NIH_CLASSES
 from src.models.checkpoint import load_checkpoint
 from src.models.densenet import build_densenet121
-from src.models.resnet import NIHResNet50
-from src.models.swin import build_swin_tiny
+from src.models.resnet import build_resnet50, NIHResNet50
+from src.models.swin import build_swin, NIHSwin
 
 logger = logging.getLogger("src.models.ensemble")
 
@@ -74,15 +74,20 @@ class MultiModelEnsemble:
         weights: Optional[Dict[str, float]] = None,
         device: Optional[Union[str, torch.device]] = None,
     ):
-        self.classes = classes or NIH_CLASSES
-        self.num_classes = len(self.classes) if classes is not None else num_classes
+        if classes is not None:
+            self.classes = classes
+            self.num_classes = len(classes)
+        else:
+            self.num_classes = num_classes
+            self.classes = NIH_CLASSES[:num_classes]
         self.device = torch.device(device if device else ("cuda" if torch.cuda.is_available() else "cpu"))
 
         # Default model weighting based on validation macro-AUROC hierarchy
         # Raw defaults are normalized over whichever models are registered.
         self.raw_weights = weights or {
-            "densenet121": 0.45,
-            "swin_tiny": 0.30,
+            "densenet121": 0.40,
+            "swin": 0.35,
+            "swin_tiny": 0.35,
             "resnet50": 0.25,
         }
 
@@ -104,35 +109,45 @@ class MultiModelEnsemble:
         swin_path: Optional[str] = None,
     ) -> None:
         """
-        Loads models from provided checkpoint paths.
+        Loads models from provided checkpoint paths or default retrained paths.
         Gracefully loads whatever is available.
         """
+        retrained_dir = Path(__file__).resolve().parent.parent.parent / "outputs" / "retrained"
+
         # 1. DenseNet-121
-        if densenet_path and Path(densenet_path).is_file():
-            try:
-                dense = build_densenet121(num_classes=self.num_classes, pretrained=False)
-                load_checkpoint(dense, densenet_path, map_location=str(self.device))
-                self.register_model("densenet121", dense)
-            except Exception as e:
-                logger.warning("Failed to load DenseNet checkpoint from %s: %s", densenet_path, e)
+        try:
+            d_path = densenet_path or str(retrained_dir / "densenet121" / "densenet121_cxr.pth")
+            dense = build_densenet121(
+                num_classes=self.num_classes,
+                pretrained=False,
+                weights_path=d_path if Path(d_path).is_file() else None,
+            )
+            self.register_model("densenet121", dense)
+        except Exception as e:
+            logger.warning("Failed to initialize DenseNet: %s", e)
 
         # 2. ResNet-50
-        if resnet_path and Path(resnet_path).is_file():
-            try:
-                res = NIHResNet50(num_classes=self.num_classes, pretrained=False)
-                load_checkpoint(res, resnet_path, map_location=str(self.device))
-                self.register_model("resnet50", res)
-            except Exception as e:
-                logger.warning("Failed to load ResNet checkpoint from %s: %s", resnet_path, e)
+        try:
+            r_path = resnet_path or str(retrained_dir / "resnet50" / "resnet50_cxr.pth")
+            res = build_resnet50(
+                num_classes=self.num_classes,
+                pretrained=False,
+                weights_path=r_path if Path(r_path).is_file() else None,
+            )
+            self.register_model("resnet50", res)
+        except Exception as e:
+            logger.warning("Failed to initialize ResNet-50: %s", e)
 
-        # 3. Swin-T
-        if swin_path and Path(swin_path).is_file():
-            try:
-                swin = build_swin_tiny(num_classes=self.num_classes, pretrained=False)
-                load_checkpoint(swin, swin_path, map_location=str(self.device))
-                self.register_model("swin_tiny", swin)
-            except Exception as e:
-                logger.warning("Failed to load Swin-T checkpoint from %s: %s", swin_path, e)
+        # 3. Swin Transformer (SwinCheX)
+        try:
+            swin = build_swin(
+                num_classes=self.num_classes,
+                pretrained=True,
+                weights_path=swin_path,
+            )
+            self.register_model("swin", swin)
+        except Exception as e:
+            logger.warning("Failed to initialize Swin Transformer: %s", e)
 
     def _recompute_weights(self) -> None:
         """Re-normalizes weights so active registered models sum to 1.0."""
@@ -188,9 +203,8 @@ class MultiModelEnsemble:
             for aug_tensor, transform_name in aug_list:
                 for model_name, model in self.models.items():
                     logits, fmaps = model(aug_tensor)
-                    # TorchXRayVision adapters already return probability scores after
-                    # applying XRV's operating-point normalization.
-                    probs = logits if getattr(model, "xrv_probabilities", False) else torch.sigmoid(logits)
+                    # All models (NIHDenseNet, NIHResNet50, NIHSwin) output probabilities directly
+                    probs = logits if (getattr(model, "xrv_probabilities", False) or isinstance(model, NIHSwin)) else torch.sigmoid(logits)
 
                     all_pass_probs.append(probs)
                     per_model_probs[model_name].append(probs)

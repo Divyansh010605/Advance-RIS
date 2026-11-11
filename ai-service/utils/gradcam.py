@@ -16,6 +16,22 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 
+def _ensure_spatial_fmaps(fmaps: torch.Tensor, grads: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Ensures feature maps and gradients are in (B, C, H, W) spatial format."""
+    # If 4D and channels are last (e.g. Swin (B, 7, 7, C))
+    if fmaps.dim() == 4 and fmaps.shape[1] == fmaps.shape[2] and fmaps.shape[3] > fmaps.shape[1]:
+        fmaps = fmaps.permute(0, 3, 1, 2).contiguous()
+        grads = grads.permute(0, 3, 1, 2).contiguous()
+    elif fmaps.dim() == 3:  # (B, L, C)
+        import math
+        b, l, c = fmaps.shape
+        side = int(math.isqrt(l))
+        if side * side == l:
+            fmaps = fmaps.view(b, side, side, c).permute(0, 3, 1, 2).contiguous()
+            grads = grads.view(b, side, side, c).permute(0, 3, 1, 2).contiguous()
+    return fmaps, grads
+
+
 def generate_single_gradcam(
     original_np: np.ndarray,
     feature_maps: torch.Tensor,
@@ -25,17 +41,20 @@ def generate_single_gradcam(
 ) -> Tuple[str, str]:
     """
     Generates Grad-CAM or Grad-CAM++ heatmap and blended overlay image.
+    Supports DenseNet-121, ResNet-50, and Swin Transformer backbones.
 
     Args:
         original_np:   uint8 numpy array (H, W, 3) – original image.
-        feature_maps:  Tensor (1, C, H', W') – feature maps from last conv layer.
-        gradients:     Tensor (1, C, H', W') – gradients w.r.t feature maps.
+        feature_maps:  Tensor (1, C, H', W') or (1, H', W', C) – feature maps from backbone.
+        gradients:     Tensor – gradients w.r.t feature maps.
         alpha:         Blend factor for overlay.
         method:        'gradcam' or 'gradcam++'.
 
     Returns:
         (heatmap_b64, overlay_b64)
     """
+    feature_maps, gradients = _ensure_spatial_fmaps(feature_maps, gradients)
+
     if method == "gradcam++":
         grad_2 = gradients.pow(2)
         grad_3 = gradients.pow(3)

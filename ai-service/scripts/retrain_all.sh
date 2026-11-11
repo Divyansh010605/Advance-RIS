@@ -16,10 +16,10 @@ echo ""
 echo "[2/3] Retraining ResNet-50..."
 python -m src.train --config configs/resnet50.yaml
 
-# 3. Swin Transformer Tiny
+# 3. Swin Transformer (SwinCheX)
 echo ""
-echo "[3/3] Retraining Swin Transformer Tiny..."
-python -m src.train --config configs/swin_tiny.yaml
+echo "[3/3] Retraining Swin Transformer (SwinCheX)..."
+python -m src.train --config configs/swin.yaml
 
 echo ""
 echo "=========================================================="

@@ -22,14 +22,14 @@ flowchart TD
     subgraph Model Zoo
         E --> F[DenseNet-121 Classifier]
         E --> G[ResNet-50 Classifier]
-        E --> H[Swin-T Transformer]
+        E --> H[SwinCheX Transformer]
     end
 
     subgraph Phase 1 — Ensemble + TTA + Uncertainty
         F --> ENS[MultiModelEnsemble]
         G --> ENS
         H --> ENS
-        ENS -->|Soft-voting| PROB[14-class probabilities]
+        ENS -->|Soft-voting: DenseNet 0.40, SwinCheX 0.35, ResNet 0.25| PROB[14/15-class probabilities]
         ENS -->|σ uncertainty| UNC[Uncertainty Quantification]
         PROB --> ONNX[ONNX Runtime Engine]
     end
@@ -81,17 +81,24 @@ flowchart TD
 - **XAI Target Layer**: XRV ResNet `layer4` output.
 - **Ensemble Weight**: 0.25 before normalization across loaded models.
 
-### 2.3 Swin Transformer Tiny (`NIHSwin`)
-- **Backbone**: `swin_tiny_patch4_window7_224` via `timm`. Depths: [2, 2, 6, 2].
-- **Classification Head**: Norm → Adaptive Avg Pool → `nn.Linear(768, 14)` → Sigmoid.
-- **XAI**: Grad-CAM with Reshape Transform $(B, H, W, C) \to (B, C, H, W)$.
-- **Ensemble Weight**: 0.30 before normalization; Swin-T is not loaded by production startup.
+### 2.3 Swin Transformer (`NIHSwin` / SwinCheX)
+- **Reference**: [SwinCheX_Classifier](https://github.com/rajaatreja/SwinCheX_Classifier)
+- **Weights**: Retrained checkpoint `outputs/retrained/swin/pretrained_SwinCheX_classifier.pth` (745 MB)
+- **Backbone**: `swin_large_patch4_window7_224` via `timm` (auto-detected from checkpoint tensor dimensions, 1536 channels). Also backward-compatible with `swin_base_patch4_window7_224` and `swin_tiny_patch4_window7_224`.
+- **Classification Head**: Norm → Adaptive Avg Pool → `nn.Linear(1536, 14)` → Sigmoid (with `No_Finding` joint probability complement when 15 classes requested).
+- **XAI**: Spatial Grad-CAM / Grad-CAM++ with automatic shape handling $(B, H, W, C) \to (B, C, H, W)$.
+- **Ensemble Weight**: 0.35 in the production 3-backbone ensemble.
 
 ---
 
 ## 3. Phase 1 — Ensemble, TTA & Uncertainty
 
-> **Current serving configuration:** `app.py` loads a two-model ensemble: TorchXRayVision DenseNet-121 (`densenet121-res224-all`) and ResNet-50 (`resnet50-res512-all`). The default raw weights 0.45 and 0.25 are normalized across those two loaded models. Swin-T remains an optional research model and is not registered by the service startup. XRV weights are fetched and cached on first initialization. Both XRV models provide 18 outputs; the service maps the 14 shared findings and derives `No_Finding` because XRV has no trained output for that label.
+> **Production serving configuration:** `app.py` loads the full tri-model ensemble initialized with the retrained model weights from `outputs/retrained/`:
+> 1. DenseNet-121 (`outputs/retrained/densenet121/densenet121_cxr.pth` - weight 0.40)
+> 2. SwinCheX Large (`outputs/retrained/swin/pretrained_SwinCheX_classifier.pth` - weight 0.35)
+> 3. ResNet-50 (`outputs/retrained/resnet50/resnet50_cxr.pth` - weight 0.25)
+>
+> All weights are normalized over loaded models. The service serves 14 NIH pathologies plus derived `No_Finding`. Full test-time augmentation (TTA) and uncertainty quantification are active.
 
 ### 3.1 Ensemble Inference Path
 
