@@ -60,9 +60,13 @@ export default function ResultsPage() {
   const uncertainCount = predictions.filter((p) => p.is_uncertain).length;
   const isNormal = detectedCount === 0;
 
-  // Find overlay for selected disease, or use first heatmap
+  // Unique diseases for heatmaps
+  const uniqueHeatmapDiseases = Array.from(new Set(heatmaps.map((h) => h.disease)));
+
+  // Find overlay for selected disease, preferring ensemble model if available
   const activeHeatmap = selectedDisease
-    ? heatmaps.find((h) => h.disease === selectedDisease)
+    ? heatmaps.find((h) => h.disease === selectedDisease && (h.model_name === 'ensemble' || !h.model_name)) ||
+      heatmaps.find((h) => h.disease === selectedDisease)
     : heatmaps[0];
   const overlayUrl = activeHeatmap?.overlay
     ? `data:image/jpeg;base64,${activeHeatmap.overlay}`
@@ -243,22 +247,22 @@ export default function ResultsPage() {
               )}
             </h2>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {heatmaps.slice(0, 5).map((h) => (
+              {uniqueHeatmapDiseases.slice(0, 6).map((disease) => (
                 <button
-                  key={h.disease}
-                  id={`select-heatmap-${h.disease.toLowerCase().replace(/\s+/g, '-')}`}
-                  onClick={() => setSelectedDisease(h.disease)}
+                  key={disease}
+                  id={`select-heatmap-${disease.toLowerCase().replace(/\s+/g, '-')}`}
+                  onClick={() => setSelectedDisease(disease)}
                   style={{
                     padding: '3px 10px',
                     borderRadius: 6,
-                    border: `1px solid ${selectedDisease === h.disease ? '#3b82f6' : '#27272a'}`,
-                    background: selectedDisease === h.disease ? '#3b82f620' : 'transparent',
-                    color: selectedDisease === h.disease ? '#60a5fa' : '#94a3b8',
+                    border: `1px solid ${selectedDisease === disease ? '#3b82f6' : '#27272a'}`,
+                    background: selectedDisease === disease ? '#3b82f620' : 'transparent',
+                    color: selectedDisease === disease ? '#60a5fa' : '#94a3b8',
                     cursor: 'pointer',
                     fontSize: '0.72rem',
                   }}
                 >
-                  {h.disease}
+                  {disease}
                 </button>
               ))}
             </div>

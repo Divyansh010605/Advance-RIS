@@ -53,6 +53,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ai-service")
 
+# Silence noisy third-party loggers
+for _noisy in ("uvicorn.access", "httpx", "httpcore", "PIL", "timm", "torchvision"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
+
 model: TBModel | None = None
 ensemble: MultiModelEnsemble | None = None
 vlm_generator: VLMReportGenerator | None = None
@@ -181,7 +185,18 @@ async def _run_analysis(
             use_tta=use_tta,
             tta_steps=tta_steps,
         )
-        grad_dict = getattr(model.net, "_gradients", {})
+        detected_classes = [p["disease"] for p in predictions_raw if p["detected"]]
+        if not detected_classes and predictions_raw:
+            top_disease = max(predictions_raw, key=lambda x: x["probability"])["disease"]
+            detected_classes = [top_disease]
+
+        # Generate fine-tuned, multi-model & fused ensemble Grad-CAMs
+        target_classes_for_cams = detected_classes if detected_classes else [p["disease"] for p in predictions_raw[:3]]
+        heatmaps_list = ensemble.generate_multiclass_cams(
+            image_tensor,
+            target_classes=target_classes_for_cams,
+            original_np=original_np,
+        )
     else:
         predictions_raw, feat_maps, grad_dict = model.predict_multi(image_tensor)
         ensemble_meta = {
@@ -190,17 +205,21 @@ async def _run_analysis(
             "models_evaluated": ["densenet121"],
             "total_passes": 1,
         }
+        detected_classes = [p["disease"] for p in predictions_raw if p["detected"]]
+        if not detected_classes and predictions_raw:
+            top_disease = max(predictions_raw, key=lambda x: x["probability"])["disease"]
+            detected_classes = [top_disease]
 
-    detected_classes = [p["disease"] for p in predictions_raw if p["detected"]]
-    if not detected_classes and predictions_raw:
-        top_disease = max(predictions_raw, key=lambda x: x["probability"])["disease"]
-        detected_classes = [top_disease]
-
-    multi_cam_dict = generate_multi_gradcam(original_np, feat_maps, grad_dict, model.classes)
-    heatmaps_list = []
-    for disease, (hm_b64, ov_b64) in multi_cam_dict.items():
-        if disease in detected_classes or len(heatmaps_list) < 3:
-            heatmaps_list.append({"disease": disease, "heatmap": hm_b64, "overlay": ov_b64})
+        multi_cam_dict = generate_multi_gradcam(original_np, feat_maps, grad_dict, model.classes)
+        heatmaps_list = []
+        for disease, (hm_b64, ov_b64) in multi_cam_dict.items():
+            if disease in detected_classes or len(heatmaps_list) < 3:
+                heatmaps_list.append({
+                    "disease": disease,
+                    "heatmap": hm_b64,
+                    "overlay": ov_b64,
+                    "model_name": "densenet121",
+                })
 
     pil_img = Image.fromarray(original_np)
     report_dict = vlm_generator.generate_report(pil_img, predictions_raw)

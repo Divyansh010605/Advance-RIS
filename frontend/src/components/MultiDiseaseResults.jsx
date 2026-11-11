@@ -29,6 +29,38 @@ function UncertaintyBadge({ uncertainty, isUncertain }) {
 }
 
 /**
+ * ConsensusBadge — renders a badge showing how many ensemble models agree.
+ */
+function ConsensusBadge({ consensus, modelsAgreeing = [] }) {
+  if (!consensus && (!modelsAgreeing || !modelsAgreeing.length)) return null;
+  const text = consensus || `${modelsAgreeing.length}/3 Agree`;
+  const isHigh = text.startsWith('3/3');
+  const isMed = text.startsWith('2/3');
+
+  const bgColor = isHigh ? 'rgba(16, 185, 129, 0.15)' : isMed ? 'rgba(245, 158, 11, 0.15)' : 'rgba(100, 116, 139, 0.15)';
+  const borderColor = isHigh ? 'rgba(16, 185, 129, 0.4)' : isMed ? 'rgba(245, 158, 11, 0.4)' : 'rgba(100, 116, 139, 0.3)';
+  const textColor = isHigh ? '#34d399' : isMed ? '#fbbf24' : '#94a3b8';
+
+  return (
+    <span
+      title={`Model consensus: ${text}${modelsAgreeing.length ? ` (${modelsAgreeing.join(', ')})` : ''}`}
+      style={{
+        fontSize: '0.65rem',
+        fontWeight: 700,
+        padding: '2px 6px',
+        borderRadius: '6px',
+        background: bgColor,
+        border: `1px solid ${borderColor}`,
+        color: textColor,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {text}
+    </span>
+  );
+}
+
+/**
  * ConfidenceInterval — renders a small CI bar beneath the probability bar.
  */
 function ConfidenceInterval({ ci, probability }) {
@@ -67,12 +99,23 @@ function ConfidenceInterval({ ci, probability }) {
 }
 
 /**
- * MultiDiseaseResults — Phase 3 enhanced pathology card grid.
- * Shows probability bars, uncertainty badges, CI bars, and uncertain-flag banner.
+ * Normalize model names for display
+ */
+function formatModelName(key) {
+  const lower = key.toLowerCase();
+  if (lower.includes('swin')) return 'SwinCheX';
+  if (lower.includes('dense')) return 'DenseNet-121';
+  if (lower.includes('res')) return 'ResNet-50';
+  return key;
+}
+
+/**
+ * MultiDiseaseResults — Enhanced pathology card grid with model attribution.
+ * Shows ensemble probability bars, per-model predictions, consensus, uncertainty, and CI.
  */
 export default function MultiDiseaseResults({ predictions = [], onSelectDisease }) {
   const [sortMode, setSortMode] = useState('probability'); // 'probability' | 'name' | 'detected'
-  const [showAll, setShowAll] = useState(false);
+  const [showModelBreakdown, setShowModelBreakdown] = useState(true);
 
   if (!predictions.length) return null;
 
@@ -85,8 +128,6 @@ export default function MultiDiseaseResults({ predictions = [], onSelectDisease 
     if (sortMode === 'detected') return Number(b.detected) - Number(a.detected);
     return 0;
   });
-
-  const displayed = showAll ? sorted : sorted.slice(0, 14); // always show all 14 but allow future truncation
 
   return (
     <div className="card mb-4" id="multi-disease-results">
@@ -110,8 +151,27 @@ export default function MultiDiseaseResults({ predictions = [], onSelectDisease 
             )}
           </div>
         </div>
-        {/* Sort controls */}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+
+        {/* View toggles & Sort controls */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            onClick={() => setShowModelBreakdown(!showModelBreakdown)}
+            style={{
+              padding: '3px 10px',
+              borderRadius: 6,
+              border: `1px solid ${showModelBreakdown ? '#10b981' : '#27272a'}`,
+              background: showModelBreakdown ? '#10b98118' : 'transparent',
+              color: showModelBreakdown ? '#34d399' : '#9ca3af',
+              fontSize: '0.75rem',
+              cursor: 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            {showModelBreakdown ? '✓ Model Breakdown' : '+ Model Breakdown'}
+          </button>
+
+          <span style={{ color: '#3f3f46', fontSize: '0.8rem' }}>|</span>
+
           {['probability', 'detected', 'name'].map((mode) => (
             <button
               key={mode}
@@ -155,11 +215,11 @@ export default function MultiDiseaseResults({ predictions = [], onSelectDisease 
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))',
           gap: 12,
         }}
       >
-        {displayed.map((p) => {
+        {sorted.map((p) => {
           const isDetected = p.detected;
           const isUncertain = p.is_uncertain;
           const probPct = (p.probability * 100).toFixed(1);
@@ -172,11 +232,13 @@ export default function MultiDiseaseResults({ predictions = [], onSelectDisease 
             ? 'rgba(239,68,68,0.07)'
             : 'var(--color-bg-alt, #18181b)';
 
+          const modelPreds = p.model_predictions || {};
+          const modelKeys = Object.keys(modelPreds);
+
           return (
-            <button
+            <div
               key={p.disease}
               id={`disease-card-${p.disease.toLowerCase().replace(/\s+/g, '-')}`}
-              onClick={() => onSelectDisease && onSelectDisease(p.disease)}
               style={{
                 background: bgColor,
                 border: `1.5px solid ${borderColor}`,
@@ -184,47 +246,58 @@ export default function MultiDiseaseResults({ predictions = [], onSelectDisease 
                 padding: '13px 14px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 4,
+                gap: 6,
                 textAlign: 'left',
-                cursor: onSelectDisease ? 'pointer' : 'default',
-                transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+                position: 'relative',
               }}
-              onMouseEnter={(e) => { if (onSelectDisease) e.currentTarget.style.transform = 'translateY(-2px)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; }}
-              aria-label={`${p.disease}: ${isDetected ? 'Detected' : 'Not detected'}, ${probPct}% probability`}
             >
-              {/* Disease name + status badge */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontWeight: 700, fontSize: '0.88rem', color: isDetected ? '#f87171' : 'var(--color-text)', maxWidth: '75%' }}>
-                  {p.disease}
-                </span>
-                <span
-                  style={{
-                    fontSize: '0.68rem',
-                    fontWeight: 700,
-                    padding: '2px 7px',
-                    borderRadius: 10,
-                    background: isDetected ? '#ef4444' : '#22c55e',
-                    color: '#fff',
-                    flexShrink: 0,
-                  }}
-                >
-                  {isDetected ? 'Detected' : 'Normal'}
-                </span>
+              {/* Disease name + badges row */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 }}>
+                <div>
+                  <span
+                    style={{
+                      fontWeight: 700,
+                      fontSize: '0.90rem',
+                      color: isDetected ? '#f87171' : 'var(--color-text)',
+                      cursor: onSelectDisease ? 'pointer' : 'default',
+                    }}
+                    onClick={() => onSelectDisease && onSelectDisease(p.disease)}
+                    title={onSelectDisease ? `Click to view ${p.disease} CAM` : p.disease}
+                  >
+                    {p.disease}
+                  </span>
+                  {p.uncertainty != null && (
+                    <div style={{ marginTop: 2 }}>
+                      <UncertaintyBadge uncertainty={p.uncertainty} isUncertain={isUncertain} />
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                  <span
+                    style={{
+                      fontSize: '0.68rem',
+                      fontWeight: 700,
+                      padding: '2px 7px',
+                      borderRadius: 10,
+                      background: isDetected ? '#ef4444' : '#22c55e',
+                      color: '#fff',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {isDetected ? 'Detected' : 'Normal'}
+                  </span>
+                  {p.consensus && (
+                    <ConsensusBadge consensus={p.consensus} modelsAgreeing={p.models_agreeing} />
+                  )}
+                </div>
               </div>
 
-              {/* Uncertainty badge */}
-              {p.uncertainty != null && (
-                <div style={{ marginTop: 2 }}>
-                  <UncertaintyBadge uncertainty={p.uncertainty} isUncertain={isUncertain} />
-                </div>
-              )}
-
-              {/* Probability bar */}
-              <div style={{ marginTop: 6 }}>
+              {/* Ensemble Probability bar */}
+              <div style={{ marginTop: 4 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#9ca3af', marginBottom: 3 }}>
-                  <span>Probability</span>
-                  <span style={{ fontWeight: 600, color: isDetected ? '#ef4444' : '#10b981' }}>{probPct}%</span>
+                  <span>Ensemble Confidence</span>
+                  <span style={{ fontWeight: 700, color: isDetected ? '#ef4444' : '#10b981' }}>{probPct}%</span>
                 </div>
                 <div style={{ height: 6, background: '#27272a', borderRadius: 3, overflow: 'hidden' }}>
                   <div
@@ -238,12 +311,7 @@ export default function MultiDiseaseResults({ predictions = [], onSelectDisease 
                   />
                 </div>
                 {/* Threshold marker */}
-                <div
-                  style={{
-                    position: 'relative',
-                    height: 0,
-                  }}
-                >
+                <div style={{ position: 'relative', height: 0 }}>
                   <div
                     title={`Threshold: ${threshPct}%`}
                     style={{
@@ -263,7 +331,83 @@ export default function MultiDiseaseResults({ predictions = [], onSelectDisease 
 
               {/* 95% CI bar */}
               <ConfidenceInterval ci={p.confidence_interval} probability={p.probability} />
-            </button>
+
+              {/* Per-Model Breakdown (DenseNet-121, SwinCheX, ResNet-50) */}
+              {showModelBreakdown && modelKeys.length > 0 && (
+                <div
+                  style={{
+                    marginTop: 6,
+                    paddingTop: 6,
+                    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                    fontSize: '0.70rem',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#94a3b8', marginBottom: 4, fontWeight: 600 }}>
+                    <span>Model Breakdown</span>
+                    <span>Prob / Vote</span>
+                  </div>
+
+                  {modelKeys.map((k) => {
+                    const prob = modelPreds[k];
+                    const probNum = typeof prob === 'number' ? prob : 0;
+                    const isPositive = probNum >= p.threshold;
+                    const displayName = formatModelName(k);
+
+                    return (
+                      <div
+                        key={k}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '2px 0',
+                        }}
+                      >
+                        <span style={{ color: '#cbd5e1' }}>{displayName}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <span style={{ fontWeight: 600, color: isPositive ? '#f87171' : '#a1a1aa' }}>
+                            {(probNum * 100).toFixed(1)}%
+                          </span>
+                          <span
+                            title={isPositive ? `${displayName} detected ${p.disease}` : `${displayName} did not detect`}
+                            style={{
+                              display: 'inline-block',
+                              width: 7,
+                              height: 7,
+                              borderRadius: '50%',
+                              backgroundColor: isPositive ? '#ef4444' : '#52525b',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* View CAM Button */}
+              {onSelectDisease && (
+                <button
+                  onClick={() => onSelectDisease(p.disease)}
+                  style={{
+                    marginTop: 4,
+                    padding: '4px 8px',
+                    borderRadius: 6,
+                    border: '1px solid #3f3f46',
+                    background: 'transparent',
+                    color: '#93c5fd',
+                    fontSize: '0.70rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 4,
+                  }}
+                >
+                  <span>👁 View Grad-CAM</span>
+                </button>
+              )}
+            </div>
           );
         })}
       </div>

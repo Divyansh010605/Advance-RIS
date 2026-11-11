@@ -27,6 +27,12 @@ const scanRecordSchema = new mongoose.Schema(
         probability: { type: Number, required: true },
         threshold: { type: Number, required: true },
         detected: { type: Boolean, required: true },
+        uncertainty: { type: Number },
+        confidence_interval: [{ type: Number }],
+        is_uncertain: { type: Boolean },
+        model_predictions: { type: mongoose.Schema.Types.Mixed },
+        models_agreeing: [{ type: String }],
+        consensus: { type: String },
       }
     ],
 
@@ -38,6 +44,7 @@ const scanRecordSchema = new mongoose.Schema(
         disease: { type: String },
         heatmap: { type: String }, // base64
         overlay: { type: String }, // base64
+        model_name: { type: String, default: 'ensemble' },
       }
     ],
 

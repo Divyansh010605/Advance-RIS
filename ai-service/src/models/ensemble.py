@@ -286,6 +286,14 @@ class MultiModelEnsemble:
             ci = [float(cis[i][0]), float(cis[i][1])]
             is_unc = bool(uncertain_flags[i])
 
+            per_model = {
+                m_name: round(float(results["per_model_probabilities"][m_name][0][i]), 4)
+                for m_name in self.models
+                if m_name in results.get("per_model_probabilities", {})
+            }
+            agreeing = [m for m, p in per_model.items() if p >= thresh]
+            consensus_str = f"{len(agreeing)}/{len(self.models)}"
+
             predictions_list.append({
                 "disease": disease,
                 "probability": round(prob, 4),
@@ -294,6 +302,9 @@ class MultiModelEnsemble:
                 "uncertainty": round(uncertainty, 4),
                 "confidence_interval": [round(ci[0], 4), round(ci[1], 4)],
                 "is_uncertain": is_unc,
+                "model_predictions": per_model,
+                "models_agreeing": agreeing,
+                "consensus": consensus_str,
             })
 
         metadata = {
@@ -306,3 +317,231 @@ class MultiModelEnsemble:
         }
 
         return predictions_list, results["primary_feature_maps"], metadata
+
+    def generate_multiclass_cams(
+        self,
+        image_tensor: torch.Tensor,
+        target_classes: List[str],
+        original_np: np.ndarray,
+        alpha: float = 0.40,
+    ) -> List[Dict[str, Any]]:
+        """
+        Generates high-precision, anatomically grounded LayerCAM heatmaps for target diseases.
+        Uses pixel-wise gradient-activation weighting (LayerCAM, Jiang et al. 2021) across:
+          - SwinCheX (Stage 4 Transformer norm2 block)
+          - DenseNet-121 (DenseBlock 4 / norm5 features)
+          - ResNet-50 (Layer 4 residual block)
+        Features:
+          - Eliminates edge/corner zero-padding artifacts
+          - Anatomical thoracic super-gaussian windowing (removes scanner labels and borders)
+          - Noise floor suppression and smooth Gaussian refinement
+          - Weighted tri-model ensemble fusion (Swin 45% + DenseNet 35% + ResNet 20%)
+        """
+        import cv2
+        from io import BytesIO
+        from PIL import Image
+        import base64
+
+        def _b64(arr: np.ndarray) -> str:
+            buf = BytesIO()
+            Image.fromarray(arr).save(buf, format="JPEG", quality=90)
+            return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+        def _refine_cam(cam_raw: np.ndarray, h: int, w: int, noise_pct: float = 0.20) -> np.ndarray:
+            """Refine raw CAM: interpolate, apply thoracic mask, suppress noise, and smooth."""
+            cam = cv2.resize(cam_raw, (w, h), interpolation=cv2.INTER_LINEAR)
+            
+            # Anatomical super-gaussian window (flat over thoracic cavity, smooth rolloff at image margins)
+            y, x = np.ogrid[:h, :w]
+            cy, cx = 0.48 * h, 0.50 * w
+            sy, sx = 0.44 * h, 0.44 * w
+            dist = ((x - cx) / sx) ** 4 + ((y - cy) / sy) ** 4
+            thoracic_mask = np.exp(-0.5 * dist).astype(np.float32)
+            cam = cam * thoracic_mask
+
+            # Background noise floor suppression
+            if cam.max() > 0:
+                thresh = noise_pct * cam.max()
+                cam = np.maximum(0.0, cam - thresh)
+                if cam.max() > 0:
+                    cam = cam / cam.max()
+            cam = cv2.GaussianBlur(cam, (15, 15), 0)
+            return np.clip(cam, 0.0, 1.0)
+
+        def _cam_to_items(cam: np.ndarray, disease: str, model_name: str,
+                          orig: np.ndarray, a: float) -> Dict[str, Any]:
+            c_uint8 = np.uint8(255 * cam)
+            hm = cv2.cvtColor(cv2.applyColorMap(c_uint8, cv2.COLORMAP_JET), cv2.COLOR_BGR2RGB)
+            ov = cv2.addWeighted(orig, 1 - a, hm, a, 0)
+            return {"disease": disease, "heatmap": _b64(hm), "overlay": _b64(ov), "model_name": model_name}
+
+        h_orig, w_orig = original_np.shape[:2]
+        output_items: List[Dict[str, Any]] = []
+
+        for disease in target_classes:
+            if disease not in self.classes:
+                continue
+            idx = self.classes.index(disease)
+            # Skip No_Finding — no localized anatomical pathology exists
+            if idx >= 14:
+                continue
+
+            model_cams: Dict[str, np.ndarray] = {}
+
+            # ── 1. Swin Transformer LayerCAM ──────────────────────────────────
+            if "swin" in self.models:
+                swin_model = self.models["swin"]
+                try:
+                    from src.models.swin import _prepare_swin_input
+                    x_swin = _prepare_swin_input(image_tensor.clone(), 224).to(self.device)
+
+                    acts_s, grads_s = [], []
+                    target_s = swin_model.model.layers[-1].blocks[-1].norm2
+                    h1 = target_s.register_forward_hook(lambda m, i, o: acts_s.append(o))
+                    h2 = target_s.register_full_backward_hook(lambda m, gi, go: grads_s.append(go[0]))
+
+                    swin_model.zero_grad()
+                    with torch.enable_grad():
+                        f = swin_model.model.forward_features(x_swin)
+                        logits = swin_model.model.forward_head(f)
+                        target_idx = min(idx, logits.shape[-1] - 1)
+                        logits[0, target_idx].backward()
+
+                    h1.remove()
+                    h2.remove()
+
+                    if acts_s and grads_s:
+                        act, grad = acts_s[0].detach(), grads_s[0].detach()
+                        if act.dim() == 4 and act.shape[1] == 7 and act.shape[2] == 7:
+                            act = act.permute(0, 3, 1, 2)
+                            grad = grad.permute(0, 3, 1, 2)
+                        elif act.dim() == 3:
+                            B, N, C = act.shape
+                            s = int(N ** 0.5)
+                            act = act.permute(0, 2, 1).reshape(B, C, s, s)
+                            grad = grad.permute(0, 2, 1).reshape(B, C, s, s)
+
+                        # Pixel-wise LayerCAM
+                        weights = torch.relu(grad)
+                        cam_s = (weights * act).sum(dim=1).squeeze()
+                        cam_s = torch.relu(cam_s).cpu().numpy()
+                        if cam_s.max() > 0:
+                            model_cams["swin"] = cam_s / cam_s.max()
+                except Exception as e_swin:
+                    logger.warning("Swin LayerCAM failed for %s: %s", disease, e_swin)
+
+            # ── 2. DenseNet-121 LayerCAM ───────────────────────────────────────
+            if "densenet121" in self.models:
+                dense_model = self.models["densenet121"]
+                try:
+                    from models.densenet_multilabel import _to_xrv_input
+                    x_dense = _to_xrv_input(image_tensor.clone(), 224).to(self.device)
+
+                    acts_d, grads_d = [], []
+                    target_d = dense_model.features.norm5
+                    h1 = target_d.register_forward_hook(lambda m, i, o: acts_d.append(o))
+                    h2 = target_d.register_full_backward_hook(lambda m, gi, go: grads_d.append(go[0]))
+
+                    dense_model.zero_grad()
+                    with torch.enable_grad():
+                        f = F.relu(dense_model.features(x_dense), inplace=False)
+                        p = F.adaptive_avg_pool2d(f, (1, 1)).flatten(1)
+                        raw_logits = dense_model.classifier(p)
+                        target_idx = dense_model.pathology_indices[idx]
+                        raw_logits[0, target_idx].backward()
+
+                    h1.remove()
+                    h2.remove()
+
+                    if acts_d and grads_d:
+                        act = F.relu(acts_d[0].detach(), inplace=False)
+                        grad = grads_d[0].detach()
+
+                        # Pixel-wise LayerCAM
+                        weights = torch.relu(grad)
+                        cam_d = (weights * act).sum(dim=1).squeeze()
+                        cam_d = torch.relu(cam_d).cpu().numpy()
+                        if cam_d.max() > 0:
+                            model_cams["densenet121"] = cam_d / cam_d.max()
+                except Exception as e_dense:
+                    logger.warning("DenseNet LayerCAM failed for %s: %s", disease, e_dense)
+
+            # ── 3. ResNet-50 LayerCAM ──────────────────────────────────────────
+            if "resnet50" in self.models:
+                res_model = self.models["resnet50"]
+                try:
+                    from models.densenet_multilabel import _to_xrv_input
+                    x_res = _to_xrv_input(image_tensor.clone(), 512).to(self.device)
+
+                    acts_r, grads_r = [], []
+                    target_r = res_model.model.layer4
+                    h1 = target_r.register_forward_hook(lambda m, i, o: acts_r.append(o))
+                    h2 = target_r.register_full_backward_hook(lambda m, gi, go: grads_r.append(go[0]))
+
+                    res_model.zero_grad()
+                    with torch.enable_grad():
+                        m_r = res_model.model
+                        out = m_r.conv1(x_res)
+                        out = m_r.bn1(out)
+                        out = m_r.relu(out)
+                        out = m_r.maxpool(out)
+                        out = m_r.layer1(out)
+                        out = m_r.layer2(out)
+                        out = m_r.layer3(out)
+                        out = m_r.layer4(out)
+                        p = m_r.avgpool(out).flatten(1)
+                        raw_logits = m_r.fc(p)
+                        target_idx = res_model.pathology_indices[idx]
+                        raw_logits[0, target_idx].backward()
+
+                    h1.remove()
+                    h2.remove()
+
+                    if acts_r and grads_r:
+                        act = acts_r[0].detach()
+                        grad = grads_r[0].detach()
+
+                        # Pixel-wise LayerCAM
+                        weights = torch.relu(grad)
+                        cam_r = (weights * act).sum(dim=1).squeeze()
+                        cam_r = torch.relu(cam_r).cpu().numpy()
+                        if cam_r.max() > 0:
+                            model_cams["resnet50"] = cam_r / cam_r.max()
+                except Exception as e_res:
+                    logger.warning("ResNet LayerCAM failed for %s: %s", disease, e_res)
+
+            # ── 4. Generate fused ensemble CAM + individual model CAM items ────
+            if model_cams:
+                logger.info("LayerCAMs computed for %s: %s", disease, list(model_cams.keys()))
+
+                # Refine individual model CAMs with anatomical window and noise cutoff
+                refined: Dict[str, np.ndarray] = {}
+                for m_name, raw_cam in model_cams.items():
+                    refined[m_name] = _refine_cam(raw_cam, h_orig, w_orig, noise_pct=0.20)
+
+                # Fused ensemble CAM (weighted combination)
+                fused = np.zeros((h_orig, w_orig), dtype=np.float32)
+                total_w = 0.0
+                cam_weights = {"swin": 0.45, "densenet121": 0.35, "resnet50": 0.20}
+                for m_name, r_cam in refined.items():
+                    w_m = cam_weights.get(m_name, 1.0)
+                    fused += w_m * r_cam
+                    total_w += w_m
+                if total_w > 0:
+                    fused /= total_w
+
+                if fused.max() > 0:
+                    fused = fused / fused.max()
+                fused = cv2.GaussianBlur(fused, (11, 11), 0)
+                fused = np.clip(fused, 0.0, 1.0)
+
+                # Emit Ensemble CAM
+                output_items.append(_cam_to_items(fused, disease, "ensemble", original_np, alpha))
+
+                # Emit Individual model CAMs for each backbone so clinicians can review each
+                for m_name, r_cam in refined.items():
+                    output_items.append(_cam_to_items(r_cam, disease, m_name, original_np, alpha))
+            else:
+                logger.warning("No CAMs could be generated for %s", disease)
+
+        return output_items

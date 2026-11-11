@@ -17,15 +17,18 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-secret}
       MONGO_INITDB_DATABASE: ${MONGO_DB:-nihxray}
     command: ["mongod", "--quiet"]
+    logging:
+      driver: "none"
     volumes:
       - mongo-data:/data/db
     networks:
       - xray-net
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
       interval: 30s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   # ─── Python AI Microservice (FastAPI + PyTorch) ─────────────────────────────
   ai-service:

@@ -89,12 +89,28 @@ class DiseasePrediction(BaseModel):
         default=None,
         description="Flag indicating high predictive uncertainty requiring clinical attention.",
     )
+    model_predictions: Optional[Dict[str, float]] = Field(
+        default=None,
+        description="Per-model predicted probabilities (e.g. {'densenet121': 0.62, 'swin': 0.58, 'resnet50': 0.54}).",
+    )
+    models_agreeing: Optional[List[str]] = Field(
+        default=None,
+        description="List of individual models that detected this pathology (prob >= threshold).",
+    )
+    consensus: Optional[str] = Field(
+        default=None,
+        description="Consensus ratio of models agreeing (e.g. '3/3' or '2/3').",
+    )
 
 
 class HeatmapItem(BaseModel):
     disease: str
     heatmap: str  # Base64 JPEG
     overlay: str  # Base64 JPEG
+    model_name: Optional[str] = Field(
+        default="ensemble",
+        description="Model architecture used for this Grad-CAM ('ensemble', 'swin', 'densenet121', 'resnet50').",
+    )
 
 
 class DetectedConditionInfo(BaseModel):
