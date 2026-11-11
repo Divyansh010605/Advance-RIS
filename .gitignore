@@ -42,6 +42,11 @@ archive/
 *.7z
 *.rar
 
+# Model downloads and cache directories
+xrv-cache/
+hf-cache/
+.cache/
+
 # NIH metadata CSVs and test datasets
 Data_Entry_*.csv
 BBox_List_*.csv

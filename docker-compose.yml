@@ -1,5 +1,3 @@
-version: "3.8"
-
 networks:
   xray-net:
     driver: bridge
@@ -41,6 +39,8 @@ services:
     volumes:
       # Persist TorchXRayVision pretrained model downloads across container rebuilds
       - ${XRV_CACHE_PATH:-./xrv-cache}:/root/.torchxrayvision
+      # Persist HuggingFace downloads (BioMedCLIP etc.) across container rebuilds
+      - ${HF_CACHE_PATH:-./hf-cache}:/root/.cache/huggingface
       # Persist retrained checkpoints and exported ONNX models
       - ./ai-service/outputs:/app/outputs
     networks:
@@ -49,10 +49,10 @@ services:
       - "8000:8000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 15s
+      interval: 10s
       timeout: 10s
-      retries: 5
-      start_period: 60s
+      retries: 10
+      start_period: 300s
 
   # ─── Node.js / Express Backend ─────────────────────────────────────────────
   backend:

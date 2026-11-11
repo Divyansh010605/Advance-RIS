@@ -40,7 +40,7 @@ RUN mkdir -p /app/outputs/onnx \
 EXPOSE 8000
 
 # Healthcheck – allows start-period for PyTorch and pretrained model downloads
-HEALTHCHECK --interval=15s --timeout=10s --start-period=60s --retries=5 \
+HEALTHCHECK --interval=10s --timeout=10s --start-period=300s --retries=10 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

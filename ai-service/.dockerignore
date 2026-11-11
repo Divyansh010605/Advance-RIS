@@ -3,6 +3,8 @@ datasets/
 data/
 outputs/
 report_generation/vlm_weights/
+test_nih/images/
+test_nih/*.csv
 
 # Model weights & large scratch files
 *.h5

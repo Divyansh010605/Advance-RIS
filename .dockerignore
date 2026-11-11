@@ -5,6 +5,10 @@ ai-service/datasets/
 ai-service/data/
 ai-service/outputs/
 ai-service/report_generation/vlm_weights/
+test_nih/images/
+test_nih/*.csv
+ai-service/test_nih/images/
+ai-service/test_nih/*.csv
 
 # Model weights – Include NIH saved models (nih_densenet121.pth) in Docker build context
 *.h5
