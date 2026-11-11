@@ -16,13 +16,14 @@ services:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-secret}
       MONGO_INITDB_DATABASE: ${MONGO_DB:-nihxray}
+    command: ["mongod", "--quiet"]
     volumes:
       - mongo-data:/data/db
     networks:
       - xray-net
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
+      interval: 30s
       timeout: 5s
       retries: 5
 

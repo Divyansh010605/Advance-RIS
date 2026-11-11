@@ -115,16 +115,17 @@ class MultiModelEnsemble:
         retrained_dir = Path(__file__).resolve().parent.parent.parent / "outputs" / "retrained"
 
         # 1. DenseNet-121
-        try:
-            d_path = densenet_path or str(retrained_dir / "densenet121" / "densenet121_cxr.pth")
-            dense = build_densenet121(
-                num_classes=self.num_classes,
-                pretrained=False,
-                weights_path=d_path if Path(d_path).is_file() else None,
-            )
-            self.register_model("densenet121", dense)
-        except Exception as e:
-            logger.warning("Failed to initialize DenseNet: %s", e)
+        if "densenet121" not in self.models:
+            try:
+                d_path = densenet_path or str(retrained_dir / "densenet121" / "densenet121_cxr.pth")
+                dense = build_densenet121(
+                    num_classes=self.num_classes,
+                    pretrained=False,
+                    weights_path=d_path if Path(d_path).is_file() else None,
+                )
+                self.register_model("densenet121", dense)
+            except Exception as e:
+                logger.warning("Failed to initialize DenseNet: %s", e)
 
         # 2. ResNet-50
         try:

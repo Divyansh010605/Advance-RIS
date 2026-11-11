@@ -78,7 +78,8 @@ async def lifespan(app: FastAPI):
         logger.info("Active ensemble models: %s", list(ensemble.models.keys()))
 
         vlm_generator = VLMReportGenerator(target_classes=model.classes)
-        vlm_generator.load_vlm()
+        # Load VLM in a background thread so the server becomes healthy and responsive immediately
+        asyncio.create_task(asyncio.to_thread(vlm_generator.load_vlm))
 
         grounding_checker = ReportGroundingChecker(target_classes=model.classes)
 
