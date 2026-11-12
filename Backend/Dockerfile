@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # ── Stage 1: Build Dependencies ───────────────────────────────────────────────
 FROM node:20-alpine AS builder
 
