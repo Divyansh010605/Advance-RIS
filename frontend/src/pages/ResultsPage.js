@@ -5,6 +5,7 @@ import HeatmapGallery from '../components/HeatmapGallery';
 import ReportEditor from '../components/ReportEditor';
 import XrayViewer from '../components/XrayViewer';
 import LongitudinalComparison from '../components/LongitudinalComparison';
+import ModelComparison from '../components/ModelComparison';
 
 const API_BASE = process.env.REACT_APP_AI_API_URL || 'http://localhost:8000';
 
@@ -60,13 +61,19 @@ export default function ResultsPage() {
   const uncertainCount = predictions.filter((p) => p.is_uncertain).length;
   const isNormal = detectedCount === 0;
 
-  // Unique diseases for heatmaps
-  const uniqueHeatmapDiseases = Array.from(new Set(heatmaps.map((h) => h.disease)));
+  // Only show detected diseases (fallback to top finding if normal)
+  const detectedDiseasesList = predictions.filter((p) => p.detected).map((p) => p.disease);
+  const availableHeatmapDiseases = Array.from(new Set(heatmaps.map((h) => h.disease)));
+  const uniqueHeatmapDiseases = detectedDiseasesList.length > 0
+    ? availableHeatmapDiseases.filter((d) => detectedDiseasesList.includes(d))
+    : availableHeatmapDiseases.slice(0, 1);
+
+  const currentActiveDisease = selectedDisease || uniqueHeatmapDiseases[0] || '';
 
   // Find overlay for selected disease, preferring ensemble model if available
-  const activeHeatmap = selectedDisease
-    ? heatmaps.find((h) => h.disease === selectedDisease && (h.model_name === 'ensemble' || !h.model_name)) ||
-      heatmaps.find((h) => h.disease === selectedDisease)
+  const activeHeatmap = currentActiveDisease
+    ? heatmaps.find((h) => h.disease === currentActiveDisease && (h.model_name === 'ensemble' || !h.model_name)) ||
+      heatmaps.find((h) => h.disease === currentActiveDisease)
     : heatmaps[0];
   const overlayUrl = activeHeatmap?.overlay
     ? `data:image/jpeg;base64,${activeHeatmap.overlay}`
@@ -204,12 +211,13 @@ export default function ResultsPage() {
       </div>
 
       {/* Tab navigation */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: '#0f172a', borderRadius: 8, padding: 4, width: 'fit-content' }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16, background: '#0f172a', borderRadius: 8, padding: 4, width: 'fit-content', flexWrap: 'wrap' }}>
         <button style={tabStyle('overview')} onClick={() => setActiveTab('overview')} id="tab-overview">Overview</button>
+        <button style={tabStyle('models')} onClick={() => setActiveTab('models')} id="tab-models">★ Tri-Model Comparison</button>
         <button style={tabStyle('viewer')} onClick={() => setActiveTab('viewer')} id="tab-viewer">Image Viewer</button>
         {showComparison && (
           <button style={tabStyle('comparison')} onClick={() => setActiveTab('comparison')} id="tab-comparison">
-            Comparison
+            Longitudinal Comparison
           </button>
         )}
       </div>
@@ -226,51 +234,33 @@ export default function ResultsPage() {
             }}
           />
 
-          {/* Per-Disease Heatmap Gallery */}
-          <HeatmapGallery heatmaps={heatmaps} previewUrl={previewUrl} />
+          {/* Per-Disease Heatmap Gallery — ONLY detected diseases */}
+          <HeatmapGallery heatmaps={heatmaps} previewUrl={previewUrl} predictions={predictions} />
 
           {/* Interactive Report Editor */}
           <ReportEditor scanId={scanId} initialReport={report} initialStatus={report.status || 'DRAFT'} />
         </>
       )}
 
+      {/* ── Tab: Tri-Model Architecture Comparison ─────────────────── */}
+      {activeTab === 'models' && (
+        <ModelComparison
+          predictions={predictions}
+          heatmaps={heatmaps}
+          previewUrl={previewUrl}
+        />
+      )}
+
       {/* ── Tab: Medical Image Viewer ────────────────────────────────── */}
       {activeTab === 'viewer' && (
         <div className="card mb-4">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <h2 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>
-              Medical Image Viewer
-              {selectedDisease && (
-                <span style={{ marginLeft: 8, fontSize: '0.78rem', color: '#3b82f6', fontWeight: 400 }}>
-                  — Grad-CAM: {selectedDisease}
-                </span>
-              )}
-            </h2>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {uniqueHeatmapDiseases.slice(0, 6).map((disease) => (
-                <button
-                  key={disease}
-                  id={`select-heatmap-${disease.toLowerCase().replace(/\s+/g, '-')}`}
-                  onClick={() => setSelectedDisease(disease)}
-                  style={{
-                    padding: '3px 10px',
-                    borderRadius: 6,
-                    border: `1px solid ${selectedDisease === disease ? '#3b82f6' : '#27272a'}`,
-                    background: selectedDisease === disease ? '#3b82f620' : 'transparent',
-                    color: selectedDisease === disease ? '#60a5fa' : '#94a3b8',
-                    cursor: 'pointer',
-                    fontSize: '0.72rem',
-                  }}
-                >
-                  {disease}
-                </button>
-              ))}
-            </div>
-          </div>
           <XrayViewer
             imageUrl={previewUrl}
             overlayUrl={overlayUrl}
-            title={selectedDisease ? `Grad-CAM: ${selectedDisease}` : 'Original X-Ray'}
+            title={currentActiveDisease ? `LayerCAM: ${currentActiveDisease}` : 'Original Radiograph'}
+            diseases={uniqueHeatmapDiseases}
+            selectedDisease={currentActiveDisease}
+            onSelectDisease={setSelectedDisease}
           />
         </div>
       )}

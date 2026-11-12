@@ -16,7 +16,7 @@ class PredictionRequest(BaseModel):
         description="Image MIME type.",
     )
     use_ensemble: bool = Field(
-        default=False,
+        default=True,
         description="Whether to run multi-model ensemble (DenseNet-121, ResNet-50, Swin-T).",
     )
     use_tta: bool = Field(

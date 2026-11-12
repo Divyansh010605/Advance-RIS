@@ -72,7 +72,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-supersecretjwtkey123}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       AI_SERVICE_URL: http://ai-service:8000
-      AI_TIMEOUT_MS: ${AI_TIMEOUT_MS:-60000}
+      AI_TIMEOUT_MS: ${AI_TIMEOUT_MS:-120000}
     volumes:
       - backend-uploads:/app/uploads
     networks:

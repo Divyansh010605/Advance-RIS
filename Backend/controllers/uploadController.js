@@ -115,6 +115,7 @@ async function uploadImage(req, res, next) {
         predictions: aiResult.predictions,
         heatmaps: aiResult.heatmaps,
         report: aiResult.report,
+        metadata: aiResult.metadata,
         result: resultLabel,
         confidence: maxProb,
         processingTimeMs: duration,

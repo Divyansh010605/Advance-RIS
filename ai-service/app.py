@@ -178,7 +178,7 @@ async def _run_analysis(
     start_time = time.time()
     image_tensor, original_np = preprocess_image(image_b64, mime_type)
 
-    if (use_ensemble or use_tta) and ensemble is not None:
+    if ensemble is not None:
         predictions_raw, feat_maps, ensemble_meta = ensemble.predict_multi_structured(
             image_tensor,
             thresholds=model.thresholds,
@@ -186,12 +186,10 @@ async def _run_analysis(
             tta_steps=tta_steps,
         )
         detected_classes = [p["disease"] for p in predictions_raw if p["detected"]]
-        if not detected_classes and predictions_raw:
-            top_disease = max(predictions_raw, key=lambda x: x["probability"])["disease"]
-            detected_classes = [top_disease]
-
-        # Generate fine-tuned, multi-model & fused ensemble Grad-CAMs
-        target_classes_for_cams = detected_classes if detected_classes else [p["disease"] for p in predictions_raw[:3]]
+        # Only generate CAMs for actually detected diseases (or top-1 finding if none detected)
+        target_classes_for_cams = detected_classes if detected_classes else (
+            [max(predictions_raw, key=lambda x: x["probability"])["disease"]] if predictions_raw else []
+        )
         heatmaps_list = ensemble.generate_multiclass_cams(
             image_tensor,
             target_classes=target_classes_for_cams,
@@ -206,14 +204,14 @@ async def _run_analysis(
             "total_passes": 1,
         }
         detected_classes = [p["disease"] for p in predictions_raw if p["detected"]]
-        if not detected_classes and predictions_raw:
-            top_disease = max(predictions_raw, key=lambda x: x["probability"])["disease"]
-            detected_classes = [top_disease]
+        target_classes_for_cams = detected_classes if detected_classes else (
+            [max(predictions_raw, key=lambda x: x["probability"])["disease"]] if predictions_raw else []
+        )
 
         multi_cam_dict = generate_multi_gradcam(original_np, feat_maps, grad_dict, model.classes)
         heatmaps_list = []
         for disease, (hm_b64, ov_b64) in multi_cam_dict.items():
-            if disease in detected_classes or len(heatmaps_list) < 3:
+            if disease in target_classes_for_cams:
                 heatmaps_list.append({
                     "disease": disease,
                     "heatmap": hm_b64,

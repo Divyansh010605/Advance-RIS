@@ -7,7 +7,7 @@ const MODEL_LABELS = {
   resnet50: { name: 'ResNet-50', badge: 'Residual', desc: 'Residual bottleneck gradients backpropagated from ResNet-50 layer4 logits.' },
 };
 
-export default function HeatmapGallery({ heatmaps = [], previewUrl = '' }) {
+export default function HeatmapGallery({ heatmaps = [], previewUrl = '', predictions = [] }) {
   const [selectedDisease, setSelectedDisease] = useState('');
   const [selectedModel, setSelectedModel] = useState('ensemble');
   const [viewMode, setViewMode] = useState('blend'); // 'blend' | 'side-by-side' | 'heatmap-only'
@@ -16,15 +16,19 @@ export default function HeatmapGallery({ heatmaps = [], previewUrl = '' }) {
   const [contrast, setContrast] = useState(100);
   const [invert, setInvert] = useState(false);
 
-  // Extract unique diseases
+  // Extract unique diseases — ONLY detected diseases are shown
   const uniqueDiseases = useMemo(() => {
     if (!heatmaps || heatmaps.length === 0) return [];
-    const set = new Set();
-    heatmaps.forEach((h) => {
-      if (h.disease) set.add(h.disease);
-    });
-    return Array.from(set);
-  }, [heatmaps]);
+    const available = Array.from(new Set(heatmaps.map((h) => h.disease)));
+    if (predictions && predictions.length > 0) {
+      const detectedSet = new Set(predictions.filter((p) => p.detected).map((p) => p.disease));
+      if (detectedSet.size > 0) {
+        const filtered = available.filter((d) => detectedSet.has(d));
+        if (filtered.length > 0) return filtered;
+      }
+    }
+    return available.slice(0, 1);
+  }, [heatmaps, predictions]);
 
   // Current active disease
   const activeDisease = selectedDisease && uniqueDiseases.includes(selectedDisease)

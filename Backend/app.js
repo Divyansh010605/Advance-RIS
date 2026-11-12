@@ -18,6 +18,9 @@ const analyticsRoutes = require('./routes/analytics.routes');
 
 const app = express();
 
+// Enable trust proxy for express-rate-limit behind reverse proxy / docker
+app.set('trust proxy', 1);
+
 // ─── Security middleware ───────────────────────────────────────────────────────
 app.use(helmet());
 app.use(cors({

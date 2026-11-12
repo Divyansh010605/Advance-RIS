@@ -1,32 +1,37 @@
 import React, { useState } from 'react';
 
 /**
- * XrayViewer — Phase 3 medical-grade image viewport.
+ * XrayViewer — Medical-grade interactive image viewport.
  *
  * Features:
- *  - Window/Level (brightness + contrast) sliders
- *  - Zoom in/out via mouse wheel and buttons
- *  - Pan by click-drag
- *  - Overlay toggle (Grad-CAM heatmap)
- *  - Invert LUT (monochrome1 style)
- *  - Reset to defaults
+ *  - Fullscreen/viewport rendering with zoom and pan
+ *  - Live window/level (brightness + contrast)
+ *  - Grad-CAM heatmap overlay with blend modes and opacity slider
+ *  - Monochromatic inversion (LUT)
+ *  - Reset controls
  */
-export default function XrayViewer({ imageUrl, overlayUrl, title = 'Chest X-Ray' }) {
+export default function XrayViewer({
+  imageUrl,
+  overlayUrl,
+  title = 'Chest X-Ray',
+  diseases = [],
+  selectedDisease = '',
+  onSelectDisease,
+}) {
   const [zoom, setZoom] = useState(1.0);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [showOverlay, setShowOverlay] = useState(false);
-  const [overlayOpacity, setOverlayOpacity] = useState(0.6);
-  const [brightness, setBrightness] = useState(100); // %
-  const [contrast, setContrast] = useState(100);     // %
+  const [showOverlay, setShowOverlay] = useState(true);
+  const [overlayOpacity, setOverlayOpacity] = useState(0.65);
+  const [brightness, setBrightness] = useState(100);
+  const [contrast, setContrast] = useState(100);
   const [invert, setInvert] = useState(false);
 
-  // Scroll-to-zoom
   function handleWheel(e) {
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    setZoom((z) => Math.max(0.3, Math.min(5.0, z + delta)));
+    setZoom((z) => Math.max(0.4, Math.min(4.0, z + delta)));
   }
 
   function handleMouseDown(e) {
@@ -50,26 +55,22 @@ export default function XrayViewer({ imageUrl, overlayUrl, title = 'Chest X-Ray'
     setBrightness(100);
     setContrast(100);
     setInvert(false);
-    setShowOverlay(false);
-    setOverlayOpacity(0.6);
+    setShowOverlay(true);
+    setOverlayOpacity(0.65);
   }
 
   const imgFilter = [
-    `brightness(${brightness / 100})`,
-    `contrast(${contrast / 100})`,
-    invert ? 'invert(1)' : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
-
-  const transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
+    `brightness(${brightness}%)`,
+    `contrast(${contrast}%)`,
+    invert ? 'invert(100%)' : '',
+  ].filter(Boolean).join(' ');
 
   const btnStyle = (active) => ({
     padding: '4px 10px',
     border: `1px solid ${active ? '#3b82f6' : '#3f3f46'}`,
     borderRadius: 6,
-    background: active ? '#3b82f620' : '#27272a',
-    color: active ? '#60a5fa' : '#9ca3af',
+    background: active ? '#3b82f625' : '#27272a',
+    color: active ? '#60a5fa' : '#cbd5e1',
     cursor: 'pointer',
     fontSize: '0.75rem',
     fontWeight: 600,
@@ -80,138 +81,188 @@ export default function XrayViewer({ imageUrl, overlayUrl, title = 'Chest X-Ray'
     <div
       id="xray-viewer"
       style={{
-        background: '#000',
+        background: '#09090b',
         borderRadius: 12,
         overflow: 'hidden',
         border: '1px solid #27272a',
         userSelect: 'none',
       }}
     >
-      {/* Toolbar */}
+      {/* Top Toolbar */}
       <div
         style={{
           background: '#0f172a',
-          padding: '8px 12px',
+          padding: '10px 14px',
           display: 'flex',
-          gap: 8,
+          gap: 10,
           alignItems: 'center',
           flexWrap: 'wrap',
           borderBottom: '1px solid #1e293b',
         }}
       >
-        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#e2e8f0', marginRight: 4 }}>
+        <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f8fafc', marginRight: 4 }}>
           {title}
         </span>
 
-        <button style={btnStyle(false)} onClick={() => setZoom((z) => Math.min(5, z + 0.25))} title="Zoom in" aria-label="Zoom in">+</button>
-        <button style={btnStyle(false)} onClick={() => setZoom((z) => Math.max(0.3, z - 0.25))} title="Zoom out" aria-label="Zoom out">−</button>
-        <span style={{ fontSize: '0.72rem', color: '#64748b', minWidth: 38 }}>{Math.round(zoom * 100)}%</span>
+        {/* Disease switcher if provided */}
+        {diseases.length > 0 && onSelectDisease && (
+          <div style={{ display: 'flex', gap: 4, marginRight: 8 }}>
+            {diseases.map((d) => (
+              <button
+                key={d}
+                onClick={() => onSelectDisease(d)}
+                style={{
+                  padding: '3px 8px',
+                  borderRadius: 4,
+                  border: `1px solid ${selectedDisease === d ? '#3b82f6' : '#334155'}`,
+                  background: selectedDisease === d ? '#3b82f630' : 'transparent',
+                  color: selectedDisease === d ? '#60a5fa' : '#94a3b8',
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div style={{ width: 1, height: 20, background: '#334155' }} />
 
-        <label style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
+        {/* Zoom Controls */}
+        <button style={btnStyle(false)} onClick={() => setZoom((z) => Math.min(4, z + 0.25))} title="Zoom In">+</button>
+        <button style={btnStyle(false)} onClick={() => setZoom((z) => Math.max(0.4, z - 0.25))} title="Zoom Out">−</button>
+        <span style={{ fontSize: '0.75rem', color: '#94a3b8', minWidth: 38 }}>
+          {Math.round(zoom * 100)}%
+        </span>
+
+        <div style={{ width: 1, height: 20, background: '#334155' }} />
+
+        {/* Window/Level Brightness */}
+        <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
           ☀
           <input
-            type="range" min={30} max={200} value={brightness}
+            type="range"
+            min={30}
+            max={200}
+            value={brightness}
             onChange={(e) => setBrightness(Number(e.target.value))}
-            style={{ width: 60 }}
-            aria-label="Brightness"
+            style={{ width: 65, cursor: 'pointer' }}
             title={`Brightness: ${brightness}%`}
           />
         </label>
 
-        <label style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
+        {/* Contrast */}
+        <label style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
           ◑
           <input
-            type="range" min={30} max={300} value={contrast}
+            type="range"
+            min={30}
+            max={250}
+            value={contrast}
             onChange={(e) => setContrast(Number(e.target.value))}
-            style={{ width: 60 }}
-            aria-label="Contrast"
+            style={{ width: 65, cursor: 'pointer' }}
             title={`Contrast: ${contrast}%`}
           />
         </label>
 
-        <div style={{ width: 1, height: 20, background: '#334155' }} />
-
-        <button style={btnStyle(invert)} onClick={() => setInvert((v) => !v)} title="Invert LUT" aria-label="Invert image">
-          INV
+        <button style={btnStyle(invert)} onClick={() => setInvert((v) => !v)} title="Invert LUT">
+          {invert ? 'Normal' : 'Invert'}
         </button>
 
+        <div style={{ width: 1, height: 20, background: '#334155' }} />
+
+        {/* Grad-CAM Overlay Toggle & Slider */}
         {overlayUrl && (
-          <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <button
               style={btnStyle(showOverlay)}
               onClick={() => setShowOverlay((v) => !v)}
-              title="Toggle Grad-CAM overlay"
-              aria-label="Toggle heatmap overlay"
+              title="Toggle LayerCAM Overlay"
             >
-              CAM
+              {showOverlay ? '✓ CAM' : 'CAM Off'}
             </button>
             {showOverlay && (
               <label style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
-                Opacity
+                Opacity:
                 <input
-                  type="range" min={0.1} max={1} step={0.05} value={overlayOpacity}
+                  type="range"
+                  min={0.1}
+                  max={1.0}
+                  step={0.05}
+                  value={overlayOpacity}
                   onChange={(e) => setOverlayOpacity(Number(e.target.value))}
-                  style={{ width: 55 }}
-                  aria-label="Overlay opacity"
+                  style={{ width: 60, cursor: 'pointer' }}
                 />
+                <span>{Math.round(overlayOpacity * 100)}%</span>
               </label>
             )}
-          </>
+          </div>
         )}
 
-        <button style={{ ...btnStyle(false), marginLeft: 'auto' }} onClick={reset} aria-label="Reset view">
-          Reset
+        <button style={{ ...btnStyle(false), marginLeft: 'auto', color: '#f87171' }} onClick={reset}>
+          Reset View
         </button>
       </div>
 
-      {/* Viewport */}
+      {/* Viewport Canvas */}
       <div
-        style={{ position: 'relative', height: 420, cursor: dragging ? 'grabbing' : 'grab', overflow: 'hidden' }}
+        style={{
+          position: 'relative',
+          height: 480,
+          backgroundColor: '#000',
+          cursor: dragging ? 'grabbing' : 'grab',
+          overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        aria-label="X-ray image viewer. Scroll to zoom, drag to pan."
-        role="img"
       >
         {imageUrl ? (
           <div
             style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform,
-              transformOrigin: 'center center',
-              transition: dragging ? 'none' : 'transform 0.05s ease',
-              marginLeft: '-50%',
-              marginTop: '-50%',
+              position: 'relative',
               width: '100%',
               height: '100%',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transformOrigin: 'center center',
+              transition: dragging ? 'none' : 'transform 0.05s ease',
             }}
           >
+            {/* Base Radiograph */}
             <img
               src={imageUrl}
               alt="Chest X-ray"
               draggable={false}
-              style={{ maxWidth: '100%', maxHeight: '100%', filter: imgFilter, display: 'block' }}
+              style={{
+                maxWidth: '96%',
+                maxHeight: '96%',
+                objectFit: 'contain',
+                filter: imgFilter,
+                display: 'block',
+                pointerEvents: 'none',
+              }}
             />
+
+            {/* Grad-CAM Heatmap Overlay */}
             {overlayUrl && showOverlay && (
               <img
                 src={overlayUrl}
-                alt="Grad-CAM heatmap overlay"
+                alt="LayerCAM Heatmap Overlay"
                 draggable={false}
                 style={{
                   position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
+                  maxWidth: '96%',
+                  maxHeight: '96%',
                   objectFit: 'contain',
                   opacity: overlayOpacity,
                   mixBlendMode: 'screen',
@@ -221,18 +272,27 @@ export default function XrayViewer({ imageUrl, overlayUrl, title = 'Chest X-Ray'
             )}
           </div>
         ) : (
-          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', fontSize: '0.9rem' }}>
-            No image loaded
-          </div>
+          <div style={{ color: '#64748b', fontSize: '0.9rem' }}>No image loaded</div>
         )}
       </div>
 
-      {/* Footer info */}
-      <div style={{ background: '#0f172a', padding: '5px 12px', display: 'flex', gap: 16, fontSize: '0.7rem', color: '#475569', borderTop: '1px solid #1e293b' }}>
-        <span>Scroll = Zoom</span>
-        <span>Drag = Pan</span>
-        <span>W/L via sliders</span>
-        {overlayUrl && <span>CAM = Grad-CAM toggle</span>}
+      {/* Footer Navigation Hints */}
+      <div
+        style={{
+          background: '#0f172a',
+          padding: '6px 14px',
+          display: 'flex',
+          gap: 16,
+          fontSize: '0.72rem',
+          color: '#64748b',
+          borderTop: '1px solid #1e293b',
+          flexWrap: 'wrap',
+        }}
+      >
+        <span>🖱 Mouse Wheel = Zoom ({Math.round(zoom * 100)}%)</span>
+        <span>✋ Click &amp; Drag = Pan</span>
+        <span>☀/◑ = Brightness &amp; Contrast</span>
+        {overlayUrl && <span>✦ LayerCAM Overlay: {showOverlay ? 'Active' : 'Hidden'}</span>}
       </div>
     </div>
   );
