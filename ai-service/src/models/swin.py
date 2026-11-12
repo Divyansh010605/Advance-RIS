@@ -49,6 +49,15 @@ def _prepare_swin_input(x: torch.Tensor, size: int = 224) -> torch.Tensor:
 
 def auto_detect_swin_arch_from_state_dict(state_dict: Dict[str, Any]) -> str:
     """Infers Swin Transformer variant (large, base, tiny) from checkpoint tensor shapes."""
+    for k in ("norm.weight", "model.norm.weight", "layers.3.blocks.1.norm2.weight"):
+        if k in state_dict and hasattr(state_dict[k], "shape") and len(state_dict[k].shape) == 1:
+            dim = state_dict[k].shape[0]
+            if dim == 1536:
+                return "swin_large_patch4_window7_224"
+            elif dim == 1024:
+                return "swin_base_patch4_window7_224"
+            elif dim == 768:
+                return "swin_tiny_patch4_window7_224"
     for k, v in state_dict.items():
         if "layers.3" in k and hasattr(v, "shape") and len(v.shape) == 1:
             dim = v.shape[0]
@@ -135,6 +144,8 @@ class NIHSwin(nn.Module):
 
         # Search standard output directories
         candidates = [
+            DEFAULT_SWIN_DIR / "swin_tiny_patch4_window7_224.pth",
+            DEFAULT_SWIN_DIR / "swin_tiny.pth",
             DEFAULT_SWIN_DIR / "pretrained_SwinCheX_classifier.pth",
             DEFAULT_SWIN_DIR / "swin_base_cxr14.pth",
             DEFAULT_SWIN_DIR / "best_model.pth",
