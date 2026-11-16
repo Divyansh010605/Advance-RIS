@@ -7,11 +7,13 @@ if sys.stdout.encoding.lower() != 'utf-8':
 
 """
 NIH ChestX-ray14 Multi-Disease Chest X-Ray Screening & Report Generation AI Service.
-FastAPI Application — Phase 2 upgrade:
-  - TorchXRayVision DenseNet-121 + ResNet-50 ensemble, TTA, and uncertainty
-  - DICOM file upload endpoint
-  - Async background job queue (submit → poll → retrieve)
-  - ACR-style PDF report download endpoint
+Unified FastAPI Application:
+  - Tri-Model Ensemble (DenseNet-121, ResNet-50, SwinCheX) with soft-voting & uncertainty
+  - Multi-Model LayerCAM & Grad-CAM visual explainability
+  - VLM-powered grounded radiology report generation
+  - DICOM ingestion & window-level preprocessing
+  - Async job queue (submit -> poll -> retrieve)
+  - ACR-style clinical diagnostic PDF report generation
 """
 import asyncio
 import base64
@@ -27,9 +29,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from PIL import Image
 
-from models.tb_model import TBModel
-from src.models.ensemble import MultiModelEnsemble
-from src.jobs.store import AsyncJobStore, JobStatus, init_job_store, get_job_store
+from models.densenet import TBModel
+from models.ensemble import MultiModelEnsemble
+from jobs.store import AsyncJobStore, JobStatus, init_job_store, get_job_store
 from schemas.prediction import (
     PredictionRequest,
     PredictionResponse,
@@ -40,12 +42,14 @@ from schemas.prediction import (
     ReportValidationRequest,
     ReportValidationResponse,
 )
-from utils.image_processor import preprocess_image
-from utils.gradcam import generate_single_gradcam, generate_multi_gradcam
-from report_generation.vlm_report import VLMReportGenerator
-from report_generation.report_grounding import ReportGroundingChecker
+from xai.image_processor import preprocess_image
+from xai.layercam import generate_single_gradcam, generate_multi_gradcam
+from vlm.generator import VLMReportGenerator
+from vlm.grounding import ReportGroundingChecker
+from vlm.pdf_export import generate_pdf_report
+from dicom.loader import dicom_to_base64_jpeg, validate_dicom_bytes
 
-print("\n--- NIH ChestX-ray14 MULTI-DISEASE AI SERVICE BOOTING UP (Phase 2) ---")
+print("\n--- NIH ChestX-ray14 MULTI-DISEASE AI SERVICE BOOTING UP ---")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -66,7 +70,7 @@ job_store: Optional[AsyncJobStore] = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load model, ensemble, VLM, and job store on startup."""
+    """Load models, ensemble, VLM, and job store on startup."""
     global model, ensemble, vlm_generator, grounding_checker, job_store
     logger.info("Initializing Multi-Disease Screening Model...")
     try:
@@ -74,7 +78,7 @@ async def lifespan(app: FastAPI):
         model.load()
         logger.info(f"Model loaded with {model.num_classes} target classes.")
 
-        # Initialize full 3-backbone ensemble (DenseNet-121, ResNet-50, SwinCheX) with retrained weights
+        # Initialize full 3-backbone ensemble (DenseNet-121, ResNet-50, SwinCheX) with local retrained weights
         ensemble = MultiModelEnsemble(num_classes=model.num_classes, classes=model.classes)
         if model.net is not None:
             ensemble.register_model("densenet121", model.net)
@@ -82,7 +86,6 @@ async def lifespan(app: FastAPI):
         logger.info("Active ensemble models: %s", list(ensemble.models.keys()))
 
         vlm_generator = VLMReportGenerator(target_classes=model.classes)
-        # Load VLM in a background thread so the server becomes healthy and responsive immediately
         asyncio.create_task(asyncio.to_thread(vlm_generator.load_vlm))
 
         grounding_checker = ReportGroundingChecker(target_classes=model.classes)
@@ -105,10 +108,10 @@ app = FastAPI(
     title="NIH ChestX-ray14 Multi-Disease Screening API",
     description=(
         "14-Class Multi-Label Classification (NIH ChestX-ray14), "
-        "Per-Disease Grad-CAM, Grounded Radiology Report Generation, "
+        "Per-Disease LayerCAM, Grounded Radiology Report Generation, "
         "DICOM ingestion, Async Job Queue, and ACR-style PDF Reports."
     ),
-    version="2.2.0",
+    version="2.3.0",
     lifespan=lifespan,
 )
 
@@ -142,7 +145,7 @@ async def health():
     return {
         "status": "healthy",
         "model_loaded": True,
-        "model_version": "2.2.0-nih14class-phase2",
+        "model_version": "2.3.0-nih14class-unified",
         "num_classes": model.num_classes,
         "device": str(model.device),
         "job_store_active": job_store is not None,
@@ -154,8 +157,8 @@ async def model_info():
     if model is None:
         raise HTTPException(status_code=503, detail="Model is not loaded.")
     return {
-        "model_architecture": "DenseNet-121 NIH ChestX-ray14 (14-class multi-label)",
-        "model_version": "2.2.0-nih14class-phase2",
+        "model_architecture": "DenseNet-121 + ResNet-50 + SwinCheX (14-class multi-label)",
+        "model_version": "2.3.0-nih14class-unified",
         "dataset": "NIH ChestX-ray14",
         "num_classes": model.num_classes,
         "classes": model.classes,
@@ -185,11 +188,15 @@ async def _run_analysis(
             use_tta=use_tta,
             tta_steps=tta_steps,
         )
-        detected_classes = [p["disease"] for p in predictions_raw if p["detected"]]
-        # Only generate CAMs for actually detected diseases (or top-1 finding if none detected)
-        target_classes_for_cams = detected_classes if detected_classes else (
-            [max(predictions_raw, key=lambda x: x["probability"])["disease"]] if predictions_raw else []
-        )
+        pathology_preds = [p for p in predictions_raw if p["disease"] != "No_Finding"]
+        detected_classes = [p["disease"] for p in pathology_preds if p["detected"]]
+        if detected_classes:
+            target_classes_for_cams = list(dict.fromkeys(detected_classes[:3] + ["No_Finding"]))
+        else:
+            top_pathologies = sorted(pathology_preds, key=lambda x: x["probability"], reverse=True)
+            top_name = top_pathologies[0]["disease"] if top_pathologies else "Infiltration"
+            target_classes_for_cams = [top_name, "No_Finding"]
+
         heatmaps_list = ensemble.generate_multiclass_cams(
             image_tensor,
             target_classes=target_classes_for_cams,
@@ -203,10 +210,14 @@ async def _run_analysis(
             "models_evaluated": ["densenet121"],
             "total_passes": 1,
         }
-        detected_classes = [p["disease"] for p in predictions_raw if p["detected"]]
-        target_classes_for_cams = detected_classes if detected_classes else (
-            [max(predictions_raw, key=lambda x: x["probability"])["disease"]] if predictions_raw else []
-        )
+        pathology_preds = [p for p in predictions_raw if p["disease"] != "No_Finding"]
+        detected_classes = [p["disease"] for p in pathology_preds if p["detected"]]
+        if detected_classes:
+            target_classes_for_cams = list(dict.fromkeys(detected_classes[:3] + ["No_Finding"]))
+        else:
+            top_pathologies = sorted(pathology_preds, key=lambda x: x["probability"], reverse=True)
+            top_name = top_pathologies[0]["disease"] if top_pathologies else "Infiltration"
+            target_classes_for_cams = [top_name, "No_Finding"]
 
         multi_cam_dict = generate_multi_gradcam(original_np, feat_maps, grad_dict, model.classes)
         heatmaps_list = []
@@ -229,7 +240,7 @@ async def _run_analysis(
         "heatmaps": heatmaps_list,
         "report": report_dict,
         "metadata": {
-            "model_version": "2.2.0-nih14class-phase2",
+            "model_version": "2.3.0-nih14class-unified",
             "dataset": "NIH ChestX-ray14",
             "processing_time_ms": proc_time,
             "target_classes_count": len(model.classes),
@@ -244,7 +255,7 @@ async def _run_analysis(
 
 @app.post("/api/v1/analyze", response_model=MultiDiseaseAnalyzeResponse, tags=["inference"])
 async def analyze_xray(request: PredictionRequest):
-    """Synchronous multi-label classification + Grad-CAM + grounded report."""
+    """Synchronous multi-label classification + LayerCAM + grounded report."""
     if model is None:
         raise HTTPException(status_code=503, detail="Model is not loaded.")
 
@@ -281,13 +292,7 @@ async def upload_dicom(file: UploadFile = File(...)):
     Upload a DICOM file (.dcm) and receive its extracted pixel data as base64 JPEG
     plus DICOM metadata. The returned base64 can be passed directly to /api/v1/analyze.
     """
-    try:
-        from src.dicom.loader import dicom_to_base64_jpeg, validate_dicom_bytes
-    except ImportError as e:
-        raise HTTPException(status_code=500, detail=f"DICOM support not available: {e}")
-
     if not file.filename or not file.filename.lower().endswith((".dcm", ".dicom")):
-        # Also accept application/dicom content type
         if file.content_type not in ("application/dicom", "application/octet-stream"):
             logger.warning("DICOM upload: suspicious filename '%s' content-type '%s'", file.filename, file.content_type)
 
@@ -389,11 +394,6 @@ async def generate_pdf(request: PredictionRequest):
     if model is None:
         raise HTTPException(status_code=503, detail="Model is not loaded.")
 
-    try:
-        from report_generation.pdf_report import generate_pdf_report
-    except ImportError as e:
-        raise HTTPException(status_code=500, detail=f"PDF generation not available: {e}")
-
     req_id = f"pdf-{uuid.uuid4().hex[:8]}"
     try:
         result = await _run_analysis(
@@ -402,7 +402,6 @@ async def generate_pdf(request: PredictionRequest):
             req_id,
         )
 
-        # Use the first heatmap overlay for PDF embedding
         hm_b64 = result["heatmaps"][0]["overlay"] if result["heatmaps"] else None
 
         pdf_bytes = generate_pdf_report(
@@ -429,18 +428,11 @@ async def generate_pdf(request: PredictionRequest):
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(exc)}")
 
 
-# ─── PDF from Job Result ──────────────────────────────────────────────────────
-
 @app.get("/api/v1/jobs/{job_id}/pdf", tags=["async-jobs", "report"])
 async def get_job_pdf(job_id: str):
     """Download the PDF report for a completed job."""
     if job_store is None:
         raise HTTPException(status_code=503, detail="Job store not initialized.")
-
-    try:
-        from report_generation.pdf_report import generate_pdf_report
-    except ImportError as e:
-        raise HTTPException(status_code=500, detail=f"PDF generation not available: {e}")
 
     job = await job_store.get_job(job_id)
     if job is None:

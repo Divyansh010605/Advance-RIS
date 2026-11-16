@@ -1,0 +1,76 @@
+# ==============================================================================
+# NIH ChestX-ray14 Unified Model Configurations
+# Multi-backbone architecture hyperparameters for screening and explainability
+# ==============================================================================
+
+global:
+  data:
+    csv_path: "data/Data_Entry_2017_v2020.csv"
+    images_dir: "data/images"
+    bbox_path: "data/BBox_List_2017.csv"
+    val_fraction: 0.10
+    test_fraction: 0.10
+    pin_memory: true
+    num_workers: 0
+
+  training:
+    seed: 42
+    epochs: 20
+    warmup_epochs: 2
+    early_stopping_patience: 5
+    loss_type: "bce_pos_weight"
+    max_pos_weight: 50.0
+    focal_gamma: 2.0
+    grad_clip_norm: 1.0
+    amp: true
+
+# ── 1. DenseNet-121 (TorchXRayVision Backbone) ────────────────────────────────
+densenet121:
+  architecture: "densenet121"
+  resolution: 224
+  batch_size: 32
+  learning_rate: 0.0001
+  min_lr: 0.000001
+  weight_decay: 0.0001
+  weights: "densenet121-res224-all"
+  retrained_checkpoint: "outputs/retrained/densenet121/densenet121_cxr.pth"
+  cam_target_layer: "features.norm5"
+  ensemble_weight: 0.35
+
+# ── 2. ResNet-50 (512x512 High-Resolution Residual Network) ───────────────────
+resnet50:
+  architecture: "resnet50"
+  resolution: 512
+  batch_size: 16
+  learning_rate: 0.00005
+  min_lr: 0.0000005
+  weight_decay: 0.0001
+  weights: "resnet50-res512-all"
+  retrained_checkpoint: "outputs/retrained/resnet50/resnet50-res512-all.pth"
+  cam_target_layer: "layer4"
+  ensemble_weight: 0.25
+
+# ── 3. SwinCheX / Swin-Tiny (Hierarchical Vision Transformer) ─────────────────
+swin:
+  architecture: "swin_tiny_patch4_window7_224"
+  resolution: 224
+  batch_size: 32
+  learning_rate: 0.00005
+  min_lr: 0.000001
+  weight_decay: 0.05
+  retrained_checkpoint: "outputs/retrained/swin/swin_tiny.pth"
+  cam_target_layer: "layers[-1].blocks[-1].norm2"
+  ensemble_weight: 0.40
+
+# ── 4. Soft-Voting Fusion Ensemble ────────────────────────────────────────────
+ensemble:
+  backbones:
+    - "swin"
+    - "densenet121"
+    - "resnet50"
+  weights:
+    swin: 0.40
+    densenet121: 0.35
+    resnet50: 0.25
+  uncertainty_threshold: 0.15
+  tta_steps: 2

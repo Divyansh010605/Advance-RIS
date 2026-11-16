@@ -1,0 +1,163 @@
+{
+  "macro_f1": 0.4286,
+  "macro_sensitivity": 0.4286,
+  "macro_specificity": 1.0,
+  "macro_precision": 0.4286,
+  "total_evaluated": 5,
+  "per_class": {
+    "Atelectasis": {
+      "precision": 1.0,
+      "sensitivity": 1.0,
+      "recall": 1.0,
+      "specificity": 1.0,
+      "f1": 1.0,
+      "tp": 1,
+      "fp": 0,
+      "tn": 4,
+      "fn": 0
+    },
+    "Cardiomegaly": {
+      "precision": 1.0,
+      "sensitivity": 1.0,
+      "recall": 1.0,
+      "specificity": 1.0,
+      "f1": 1.0,
+      "tp": 1,
+      "fp": 0,
+      "tn": 4,
+      "fn": 0
+    },
+    "Effusion": {
+      "precision": 1.0,
+      "sensitivity": 1.0,
+      "recall": 1.0,
+      "specificity": 1.0,
+      "f1": 1.0,
+      "tp": 1,
+      "fp": 0,
+      "tn": 4,
+      "fn": 0
+    },
+    "Infiltration": {
+      "precision": 1.0,
+      "sensitivity": 1.0,
+      "recall": 1.0,
+      "specificity": 1.0,
+      "f1": 1.0,
+      "tp": 1,
+      "fp": 0,
+      "tn": 4,
+      "fn": 0
+    },
+    "Mass": {
+      "precision": 0.0,
+      "sensitivity": 0.0,
+      "recall": 0.0,
+      "specificity": 1.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "tn": 5,
+      "fn": 0
+    },
+    "Nodule": {
+      "precision": 0.0,
+      "sensitivity": 0.0,
+      "recall": 0.0,
+      "specificity": 1.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "tn": 5,
+      "fn": 0
+    },
+    "Pneumonia": {
+      "precision": 1.0,
+      "sensitivity": 1.0,
+      "recall": 1.0,
+      "specificity": 1.0,
+      "f1": 1.0,
+      "tp": 1,
+      "fp": 0,
+      "tn": 4,
+      "fn": 0
+    },
+    "Pneumothorax": {
+      "precision": 0.0,
+      "sensitivity": 0.0,
+      "recall": 0.0,
+      "specificity": 1.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "tn": 5,
+      "fn": 0
+    },
+    "Consolidation": {
+      "precision": 1.0,
+      "sensitivity": 1.0,
+      "recall": 1.0,
+      "specificity": 1.0,
+      "f1": 1.0,
+      "tp": 1,
+      "fp": 0,
+      "tn": 4,
+      "fn": 0
+    },
+    "Edema": {
+      "precision": 0.0,
+      "sensitivity": 0.0,
+      "recall": 0.0,
+      "specificity": 1.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "tn": 5,
+      "fn": 0
+    },
+    "Emphysema": {
+      "precision": 0.0,
+      "sensitivity": 0.0,
+      "recall": 0.0,
+      "specificity": 1.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "tn": 5,
+      "fn": 0
+    },
+    "Fibrosis": {
+      "precision": 0.0,
+      "sensitivity": 0.0,
+      "recall": 0.0,
+      "specificity": 1.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "tn": 5,
+      "fn": 0
+    },
+    "Pleural_Thickening": {
+      "precision": 0.0,
+      "sensitivity": 0.0,
+      "recall": 0.0,
+      "specificity": 1.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "tn": 5,
+      "fn": 0
+    },
+    "Hernia": {
+      "precision": 0.0,
+      "sensitivity": 0.0,
+      "recall": 0.0,
+      "specificity": 1.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "tn": 5,
+      "fn": 0
+    }
+  }
+}

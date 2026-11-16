@@ -57,12 +57,16 @@ export default function ResultsPage() {
   const meta = result.metadata || {};
   const scanId = result.id || result.request_id;
 
-  const detectedCount = predictions.filter((p) => p.detected).length;
+  const detectedCount = predictions.filter(
+    (p) => p.disease !== 'No_Finding' && (p.detected || (Array.isArray(p.models_agreeing) && p.models_agreeing.length >= 2))
+  ).length;
   const uncertainCount = predictions.filter((p) => p.is_uncertain).length;
   const isNormal = detectedCount === 0;
 
   // Only show detected diseases (fallback to top finding if normal)
-  const detectedDiseasesList = predictions.filter((p) => p.detected).map((p) => p.disease);
+  const detectedDiseasesList = predictions
+    .filter((p) => p.disease !== 'No_Finding' && (p.detected || (Array.isArray(p.models_agreeing) && p.models_agreeing.length >= 2)))
+    .map((p) => p.disease);
   const availableHeatmapDiseases = Array.from(new Set(heatmaps.map((h) => h.disease)));
   const uniqueHeatmapDiseases = detectedDiseasesList.length > 0
     ? availableHeatmapDiseases.filter((d) => detectedDiseasesList.includes(d))

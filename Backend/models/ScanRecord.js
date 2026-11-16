@@ -57,12 +57,10 @@ const scanRecordSchema = new mongoose.Schema(
       status: { type: String, default: 'draft' },
       findings: [{ type: String }],
       impression: [{ type: String }],
-      detectedConditions: [
-        {
-          name: String,
-          confidence: Number
-        }
-      ],
+      detectedConditions: {
+        type: [mongoose.Schema.Types.Mixed],
+        default: [],
+      },
       modelConfidence: {
         overall: Number,
         perDisease: mongoose.Schema.Types.Mixed

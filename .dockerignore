@@ -4,23 +4,18 @@ data/
 ai-service/datasets/
 ai-service/data/
 ai-service/outputs/
-ai-service/report_generation/vlm_weights/
-test_nih/images/
-test_nih/*.csv
-ai-service/test_nih/images/
-ai-service/test_nih/*.csv
 
-# Model weights – Include NIH saved models (nih_densenet121.pth) in Docker build context
+# Model weights & archives
 *.h5
 *.bin
 *.safetensors
 *.zip
 *.tar.gz
-ai-service/test.onnx
-ai-service/test2.onnx
+*.onnx
 
-!ai-service/test_nih/saved_models/
-!ai-service/test_nih/saved_models/*
+# Explicitly preserve retrained model weights in ai-service
+!ai-service/outputs/retrained/
+!ai-service/outputs/retrained/**
 
 # ── Caches & Virtual Environments ──────────────────────────────────────────────
 node_modules/

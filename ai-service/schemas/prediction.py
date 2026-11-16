@@ -1,7 +1,7 @@
 """
 Pydantic schemas for the AI service supporting Multi-Disease screening and Report Generation.
 """
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Union
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -127,7 +127,7 @@ class ReportDraft(BaseModel):
     status: str = "draft"
     findings: List[str]
     impression: List[str]
-    detected_conditions: List[DetectedConditionInfo]
+    detected_conditions: List[Union[DetectedConditionInfo, str]]
     model_confidence: ModelConfidenceInfo
     review_required: bool = True
     unsupported_findings: List[str] = []

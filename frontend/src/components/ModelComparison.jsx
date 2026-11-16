@@ -12,24 +12,29 @@ export default function ModelComparison({
   heatmaps = [],
   previewUrl = '',
 }) {
-  // Find detected diseases
+  // Find detected diseases (prioritize actual pathologies)
   const detectedDiseases = useMemo(() => {
-    const list = predictions.filter((p) => p.detected).map((p) => p.disease);
-    if (list.length > 0) return list;
-    // Fallback if normal: top probability disease
-    if (predictions.length > 0) {
-      const top = [...predictions].sort((a, b) => b.probability - a.probability)[0];
-      return [top.disease];
+    const list = predictions
+      .filter((p) => (p.detected || (Array.isArray(p.models_agreeing) && p.models_agreeing.length >= 2)) && p.disease !== 'No_Finding')
+      .map((p) => p.disease);
+    if (list.length > 0) {
+      return [...list, 'No_Finding'];
     }
-    return [];
+    // Fallback if normal: top probability pathology + No_Finding
+    const pathologies = predictions.filter((p) => p.disease !== 'No_Finding');
+    if (pathologies.length > 0) {
+      const top = [...pathologies].sort((a, b) => b.probability - a.probability)[0];
+      return [top.disease, 'No_Finding'];
+    }
+    return predictions.length > 0 ? [predictions[0].disease] : [];
   }, [predictions]);
 
-  const [activeDisease, setActiveDisease] = useState(detectedDiseases[0] || 'Atelectasis');
+  const [activeDisease, setActiveDisease] = useState('');
 
-  // Ensure activeDisease stays valid
-  const currentDisease = detectedDiseases.includes(activeDisease)
+  // Default to top pathology (first non-No_Finding), unless explicitly clicked
+  const currentDisease = activeDisease && (detectedDiseases.includes(activeDisease) || predictions.some((p) => p.disease === activeDisease))
     ? activeDisease
-    : detectedDiseases[0] || '';
+    : (detectedDiseases.find((d) => d !== 'No_Finding') || detectedDiseases[0] || 'Atelectasis');
 
   // Get active prediction object
   const activePred = useMemo(() => {
@@ -52,23 +57,33 @@ export default function ModelComparison({
   const resProb = getProb('res') ?? activePred?.probability ?? 0;
   const ensembleProb = activePred?.probability ?? 0;
   const threshold = activePred?.threshold ?? 0.45;
+  const isFusedDetected = Boolean(
+    activePred &&
+    ((activePred.detected || (Array.isArray(activePred.models_agreeing) && activePred.models_agreeing.length >= 2)) &&
+      activePred.disease !== 'No_Finding')
+  );
 
   // Find heatmaps for active disease
   const diseaseHeatmaps = useMemo(() => {
-    return heatmaps.filter((h) => h.disease === currentDisease);
+    const direct = heatmaps.filter((h) => h.disease === currentDisease);
+    if (direct.length > 0) return direct;
+    return heatmaps;
   }, [heatmaps, currentDisease]);
 
   const findCAM = (prefix) => {
     return diseaseHeatmaps.find((h) => {
       const m = (h.model_name || '').toLowerCase();
       return m.includes(prefix.toLowerCase());
+    }) || heatmaps.find((h) => {
+      const m = (h.model_name || '').toLowerCase();
+      return m.includes(prefix.toLowerCase());
     });
   };
 
-  const ensembleCAM = findCAM('ensemble') || diseaseHeatmaps.find((h) => !h.model_name) || diseaseHeatmaps[0];
-  const swinCAM = findCAM('swin');
-  const denseCAM = findCAM('dense') || diseaseHeatmaps.find((h) => !h.model_name);
-  const resCAM = findCAM('res');
+  const ensembleCAM = findCAM('ensemble') || diseaseHeatmaps.find((h) => !h.model_name) || diseaseHeatmaps[0] || heatmaps[0];
+  const swinCAM = findCAM('swin') || ensembleCAM;
+  const denseCAM = findCAM('dense') || diseaseHeatmaps.find((h) => !h.model_name) || ensembleCAM;
+  const resCAM = findCAM('res') || ensembleCAM;
 
   const modelsMeta = [
     {
@@ -119,10 +134,10 @@ export default function ModelComparison({
           </p>
         </div>
 
-        {/* Detected pathology buttons only */}
+        {/* Detected / Comparative pathology buttons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 600, marginRight: 4 }}>
-            Detected Pathology:
+            {predictions.some((p) => p.detected && p.disease !== 'No_Finding') ? 'Detected Pathology:' : 'Screening Focus:'}
           </span>
           {detectedDiseases.map((d) => {
             const isSelected = currentDisease === d;
@@ -142,7 +157,7 @@ export default function ModelComparison({
                   transition: 'all 0.15s',
                 }}
               >
-                {d}
+                {d === 'No_Finding' ? 'No_Finding (Clear Lung)' : d}
               </button>
             );
           })}
@@ -245,12 +260,12 @@ export default function ModelComparison({
                 fontWeight: 700,
                 padding: '2px 8px',
                 borderRadius: 8,
-                background: activePred?.detected ? 'rgba(239, 68, 68, 0.2)' : 'rgba(34, 197, 94, 0.2)',
-                color: activePred?.detected ? '#f87171' : '#4ade80',
-                border: `1px solid ${activePred?.detected ? '#ef444455' : '#22c55e55'}`,
+                background: isFusedDetected ? 'rgba(239, 68, 68, 0.2)' : 'rgba(34, 197, 94, 0.2)',
+                color: isFusedDetected ? '#f87171' : '#4ade80',
+                border: `1px solid ${isFusedDetected ? '#ef444455' : '#22c55e55'}`,
               }}
             >
-              {activePred?.detected ? 'Detected' : 'Normal'}
+              {isFusedDetected ? 'Detected' : 'Normal'}
             </span>
           </div>
 
@@ -400,7 +415,7 @@ export default function ModelComparison({
               const sP = getVal('swin');
               const dP = getVal('dense');
               const rP = getVal('res');
-              const isDetected = p.detected;
+              const isDetected = (p.detected || (Array.isArray(p.models_agreeing) && p.models_agreeing.length >= 2)) && p.disease !== 'No_Finding';
               const isCurrent = p.disease === currentDisease;
 
               return (

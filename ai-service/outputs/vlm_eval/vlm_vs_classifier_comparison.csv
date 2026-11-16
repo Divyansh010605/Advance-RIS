@@ -1,0 +1,15 @@
+finding,classifier_auroc,classifier_f1,vlm_f1,vlm_sensitivity,vlm_specificity,vlm_precision
+Atelectasis,,0.0,1.0,1.0,1.0,1.0
+Cardiomegaly,,0.0,1.0,1.0,1.0,1.0
+Effusion,,0.0,1.0,1.0,1.0,1.0
+Infiltration,,0.0,1.0,1.0,1.0,1.0
+Mass,0.5,0.4,0.0,0.0,1.0,0.0
+Nodule,0.5,0.4,0.0,0.0,1.0,0.0
+Pneumonia,,0.0,1.0,1.0,1.0,1.0
+Pneumothorax,,0.0,0.0,0.0,1.0,0.0
+Consolidation,0.5,0.4,1.0,1.0,1.0,1.0
+Edema,0.5,0.4,0.0,0.0,1.0,0.0
+Emphysema,,0.0,0.0,0.0,1.0,0.0
+Fibrosis,,0.0,0.0,0.0,1.0,0.0
+Pleural_Thickening,,0.0,0.0,0.0,1.0,0.0
+Hernia,,0.0,0.0,0.0,1.0,0.0

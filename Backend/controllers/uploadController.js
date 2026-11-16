@@ -58,7 +58,11 @@ async function uploadImage(req, res, next) {
 
     const duration = Date.now() - start;
 
-    const detectedConditions = aiResult.predictions.filter((p) => p.detected);
+    const detectedConditions = aiResult.predictions.filter((p) => {
+      if (p.disease === 'No_Finding') return false;
+      const numAgreeing = Array.isArray(p.models_agreeing) ? p.models_agreeing.length : 0;
+      return p.detected || numAgreeing >= 2;
+    });
     const hasPathology = detectedConditions.length > 0;
     const resultLabel = hasPathology ? 'PATHOLOGY_DETECTED' : 'NORMAL';
 
@@ -67,6 +71,24 @@ async function uploadImage(req, res, next) {
       : 0;
 
     const firstHeatmap = aiResult.heatmaps && aiResult.heatmaps.length ? aiResult.heatmaps[0] : {};
+
+    // Normalize detected conditions for aiReport so it cleanly supports both string arrays and object arrays
+    const rawReportConditions = aiResult.report?.detected_conditions || [];
+    const normalizedConditions = rawReportConditions.map((cond) => {
+      if (typeof cond === 'string') {
+        const matched = (aiResult.predictions || []).find(
+          (p) => p.disease && p.disease.toLowerCase() === cond.toLowerCase()
+        );
+        return {
+          name: cond,
+          confidence: matched ? matched.probability : maxProb,
+        };
+      }
+      return {
+        name: cond.name || cond.disease || String(cond),
+        confidence: typeof cond.confidence === 'number' ? cond.confidence : (cond.probability || maxProb),
+      };
+    });
 
     const newRecord = await ScanRecord.create({
       userId: req.user?._id,
@@ -83,7 +105,7 @@ async function uploadImage(req, res, next) {
         status: aiResult.report?.status || 'draft',
         findings: aiResult.report?.findings || [],
         impression: aiResult.report?.impression || [],
-        detectedConditions: aiResult.report?.detected_conditions || [],
+        detectedConditions: normalizedConditions,
         modelConfidence: aiResult.report?.model_confidence || { overall: maxProb, perDisease: {} },
         unsupportedFindings: aiResult.report?.unsupported_findings || [],
         generatedAt: new Date(),
