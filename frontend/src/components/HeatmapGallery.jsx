@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 
 const MODEL_LABELS = {
   ensemble: { name: '✦ Ensemble Fused', badge: 'Optimal', desc: 'Weighted fusion across SwinCheX, DenseNet-121, and ResNet-50 with 20% background noise suppression and Gaussian refinement.' },
-  swin: { name: 'SwinCheX', badge: 'Transformer', desc: 'Attention feature gradients backpropagated from Swin Transformer Stage 4 norm1 layer.' },
+  swin: { name: 'SwinCheX', badge: 'Transformer', desc: 'Attention feature gradients backpropagated from the final Swin Transformer stage output.' },
   densenet121: { name: 'DenseNet-121', badge: 'CNN', desc: 'Convolutional feature gradients backpropagated from DenseNet denseblock4 logits.' },
   resnet50: { name: 'ResNet-50', badge: 'Residual', desc: 'Residual bottleneck gradients backpropagated from ResNet-50 layer4 logits.' },
 };

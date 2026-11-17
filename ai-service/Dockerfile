@@ -1,4 +1,14 @@
-FROM python:3.11-slim
+# Multi-platform build:
+#   Laptop / x86 / generic ARM (default):  docker compose up --build
+#       -> python:3.11-slim + matched CPU torch/torchvision wheels
+#   NVIDIA Jetson (GPU):  docker compose -f docker-compose.yml -f docker-compose.jetson.yml up --build
+#       -> NVIDIA L4T PyTorch base image that already ships CUDA torch/torchvision (TORCH_MODE=skip)
+ARG BASE_IMAGE=python:3.11-slim
+FROM ${BASE_IMAGE}
+
+# cpu  = install the CPU torch/torchvision pair from download.pytorch.org
+# skip = keep the torch/torchvision already present in the base image (Jetson)
+ARG TORCH_MODE=cpu
 
 # System dependencies:
 #   libgl1 / libglib2.0-0 / libsm6 / libxext6 / libxrender-dev – OpenCV & imaging
@@ -23,8 +33,13 @@ WORKDIR /app
 # ── Install Python dependencies (cached build layer) ──────────────────────────
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt \
-        --extra-index-url https://download.pytorch.org/whl/cpu
+    if [ "$TORCH_MODE" = "cpu" ]; then \
+        pip install --no-cache-dir torch==2.2.1 torchvision==0.17.1 \
+            --index-url https://download.pytorch.org/whl/cpu; \
+    fi && \
+    pip freeze | grep -i -E '^(torch|torchvision)==' > /tmp/torch-constraints.txt && \
+    cat /tmp/torch-constraints.txt && \
+    pip install --no-cache-dir -r requirements.txt -c /tmp/torch-constraints.txt
 
 # ── Copy application source ───────────────────────────────────────────────────
 LABEL maintainer="NIH Multi-Disease AI Team"

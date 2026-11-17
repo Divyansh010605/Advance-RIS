@@ -182,7 +182,8 @@ class TBModel:
     def _load_thresholds(self) -> Dict[str, float]:
         if os.path.exists(THRESHOLDS_FILE):
             with open(THRESHOLDS_FILE, "r") as f:
-                return json.load(f).get("thresholds", {})
+                data = json.load(f)
+                return data.get("thresholds", data)
         return {c: 0.50 for c in NIH_LABELS}
 
     def load(self, weights_path: Optional[str | Path] = None):

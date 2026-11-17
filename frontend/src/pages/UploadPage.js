@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePrediction } from '../hooks/usePrediction';
 import { parseDicom } from '../utils/dicom';
@@ -15,6 +15,79 @@ export default function UploadPage() {
   const [isProcessingDicom, setIsProcessingDicom] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef(null);
+
+  // ── Camera capture ──────────────────────────────────────────────────────────
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const [cameraReady, setCameraReady] = useState(false);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    setCameraReady(false);
+  }, []);
+
+  async function openCamera() {
+    setCameraError('');
+    setCameraOpen(true);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError('Camera access is not available. Open the app via http://localhost or HTTPS.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => {});
+      }
+    } catch (err) {
+      setCameraError(`Could not open camera: ${err.message || err.name}`);
+    }
+  }
+
+  function closeCamera() {
+    stopCamera();
+    setCameraOpen(false);
+  }
+
+  useEffect(() => stopCamera, [stopCamera]);
+
+  async function captureAndAnalyze() {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.95));
+    if (!blob) {
+      setCameraError('Failed to capture image from camera.');
+      return;
+    }
+    const captured = new File([blob], `capture-${Date.now()}.jpg`, { type: 'image/jpeg' });
+    const url = URL.createObjectURL(blob);
+    setFile(captured);
+    setPreview(url);
+    closeCamera();
+    await analyze(captured, url);
+  }
+
+  async function analyze(f, previewUrl) {
+    try {
+      const result = await predict(f);
+      navigate('/results', { state: { result, previewUrl } });
+    } catch {
+      // error displayed from hook
+    }
+  }
 
   async function handleFile(selected) {
     if (!selected) return;
@@ -58,12 +131,7 @@ export default function UploadPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!file) return;
-    try {
-      const result = await predict(file);
-      navigate('/results', { state: { result, previewUrl: preview } });
-    } catch {
-      // error displayed from hook
-    }
+    await analyze(file, preview);
   }
 
   return (
@@ -139,7 +207,52 @@ export default function UploadPage() {
             >
               {isProcessingDicom ? 'Processing DICOM...' : loading ? 'Analyzing…' : 'Analyze X-Ray'}
             </button>
+
+            <button
+              id="camera-btn"
+              type="button"
+              className="btn btn-ghost btn-lg mt-4"
+              style={{ width: '100%', justifyContent: 'center' }}
+              onClick={openCamera}
+              disabled={loading || isProcessingDicom}
+            >
+              Capture with Camera
+            </button>
           </form>
+
+          {cameraOpen && (
+            <div
+              role="dialog"
+              aria-label="Camera capture"
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 16 }}
+            >
+              {cameraError ? (
+                <div className="alert alert-error" role="alert">{cameraError}</div>
+              ) : (
+                <video
+                  ref={videoRef}
+                  playsInline
+                  muted
+                  onLoadedMetadata={() => setCameraReady(true)}
+                  style={{ maxWidth: '100%', maxHeight: '70vh', borderRadius: 8, background: '#000' }}
+                />
+              )}
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button
+                  id="capture-btn"
+                  type="button"
+                  className="btn btn-primary btn-lg"
+                  onClick={captureAndAnalyze}
+                  disabled={!cameraReady || !!cameraError}
+                >
+                  Capture &amp; Analyze
+                </button>
+                <button type="button" className="btn btn-ghost btn-lg" onClick={closeCamera}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Instructions */}

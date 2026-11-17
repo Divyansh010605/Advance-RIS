@@ -92,9 +92,9 @@ class NIHSwin(nn.Module):
                 ckpt_file = p
         if ckpt_file is None:
             for candidate in [
+                DEFAULT_SWIN_DIR / "pretrained_SwinCheX_classifier.pth",
                 DEFAULT_SWIN_DIR / "swin_tiny.pth",
                 DEFAULT_SWIN_DIR / "swin_tiny_patch4_window7_224.pth",
-                DEFAULT_SWIN_DIR / "pretrained_SwinCheX_classifier.pth",
             ]:
                 if candidate.is_file():
                     ckpt_file = candidate
@@ -110,6 +110,7 @@ class NIHSwin(nn.Module):
             logger.info("Loaded instantiated SwinTransformer module directly from checkpoint.")
             self.model = raw_loaded["model"]
             self.weights_path = str(ckpt_file)
+            self.native_outputs = self._head_outputs(self.model)
             return
 
         # Case 2: State dict
@@ -121,6 +122,14 @@ class NIHSwin(nn.Module):
                     break
             if state_dict is None:
                 state_dict = raw_loaded
+            # Refuse checkpoints whose classifier is not an NIH head (e.g. ImageNet 1000-class
+            # weights). Loading them silently leaves a RANDOM head -> meaningless probabilities.
+            head_keys = [k for k in state_dict if k.endswith("head.fc.weight") or k.endswith("head.weight")]
+            if head_keys and state_dict[head_keys[0]].shape[0] not in (14, 15):
+                raise ValueError(
+                    f"Swin checkpoint {ckpt_file} has a {state_dict[head_keys[0]].shape[0]}-class head "
+                    "(not an NIH ChestX-ray14 classifier); refusing to use an untrained head."
+                )
             detected_arch = auto_detect_swin_arch_from_state_dict(state_dict)
             if detected_arch != self.architecture:
                 logger.info("Auto-detected Swin arch from weights: %s (overrides %s)", detected_arch, self.architecture)
@@ -153,6 +162,13 @@ class NIHSwin(nn.Module):
             self.model.load_state_dict(shape_matched_state, strict=False)
             self.weights_path = str(ckpt_file)
             logger.info("Swin (%s) successfully loaded from: %s", self.architecture, ckpt_file)
+        self.native_outputs = self._head_outputs(self.model)
+
+    @staticmethod
+    def _head_outputs(model: nn.Module) -> int:
+        head = getattr(model, "head", None)
+        fc = getattr(head, "fc", head)
+        return int(getattr(fc, "out_features", 14))
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         x = _prepare_swin_input(x, 224)
@@ -161,6 +177,9 @@ class NIHSwin(nn.Module):
         self._feature_maps = x_f
         logits = m.forward_head(x_f)
         probs = torch.sigmoid(logits)
+        if probs.shape[1] == 14 and self.num_classes == 15:
+            no_finding = (1.0 - probs).clamp(0, 1).prod(dim=1, keepdim=True)
+            probs = torch.cat([probs, no_finding], dim=1)
         return probs, x_f
 
 

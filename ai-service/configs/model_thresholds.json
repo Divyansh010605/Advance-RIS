@@ -1,0 +1,103 @@
+{
+  "n_images": 800,
+  "thresholds": {
+    "densenet121": {
+      "Atelectasis": 0.363,
+      "Cardiomegaly": 0.524,
+      "Effusion": 0.317,
+      "Infiltration": 0.523,
+      "Mass": 0.507,
+      "Nodule": 0.503,
+      "Pneumonia": 0.447,
+      "Pneumothorax": 0.51,
+      "Consolidation": 0.356,
+      "Edema": 0.5,
+      "Emphysema": 0.483,
+      "Fibrosis": 0.52,
+      "Pleural_Thickening": 0.249,
+      "Hernia": 0.5
+    },
+    "resnet50": {
+      "Atelectasis": 0.076,
+      "Cardiomegaly": 0.02,
+      "Effusion": 0.07,
+      "Infiltration": 0.142,
+      "Mass": 0.029,
+      "Nodule": 0.055,
+      "Pneumonia": 0.072,
+      "Pneumothorax": 0.02,
+      "Consolidation": 0.062,
+      "Edema": 0.5,
+      "Emphysema": 0.02,
+      "Fibrosis": 0.036,
+      "Pleural_Thickening": 0.029,
+      "Hernia": 0.5
+    },
+    "swin": {
+      "Atelectasis": 0.068,
+      "Cardiomegaly": 0.03,
+      "Effusion": 0.087,
+      "Infiltration": 0.17,
+      "Mass": 0.02,
+      "Nodule": 0.046,
+      "Pneumonia": 0.02,
+      "Pneumothorax": 0.038,
+      "Consolidation": 0.061,
+      "Edema": 0.5,
+      "Emphysema": 0.02,
+      "Fibrosis": 0.039,
+      "Pleural_Thickening": 0.02,
+      "Hernia": 0.5
+    }
+  },
+  "auc": {
+    "densenet121": {
+      "Atelectasis": 0.781,
+      "Cardiomegaly": 0.909,
+      "Effusion": 0.872,
+      "Infiltration": 0.716,
+      "Mass": 0.704,
+      "Nodule": 0.644,
+      "Pneumonia": 0.749,
+      "Pneumothorax": 0.835,
+      "Consolidation": 0.788,
+      "Edema": null,
+      "Emphysema": 0.728,
+      "Fibrosis": 0.791,
+      "Pleural_Thickening": 0.72,
+      "Hernia": null
+    },
+    "resnet50": {
+      "Atelectasis": 0.799,
+      "Cardiomegaly": 0.947,
+      "Effusion": 0.865,
+      "Infiltration": 0.689,
+      "Mass": 0.747,
+      "Nodule": 0.711,
+      "Pneumonia": 0.789,
+      "Pneumothorax": 0.828,
+      "Consolidation": 0.798,
+      "Edema": null,
+      "Emphysema": 0.852,
+      "Fibrosis": 0.812,
+      "Pleural_Thickening": 0.664,
+      "Hernia": null
+    },
+    "swin": {
+      "Atelectasis": 0.866,
+      "Cardiomegaly": 0.969,
+      "Effusion": 0.927,
+      "Infiltration": 0.775,
+      "Mass": 0.801,
+      "Nodule": 0.765,
+      "Pneumonia": 0.871,
+      "Pneumothorax": 0.851,
+      "Consolidation": 0.848,
+      "Edema": null,
+      "Emphysema": 0.896,
+      "Fibrosis": 0.899,
+      "Pleural_Thickening": 0.752,
+      "Hernia": null
+    }
+  }
+}

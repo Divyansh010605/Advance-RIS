@@ -1,0 +1,17 @@
+# NVIDIA Jetson override: GPU-enabled ai-service using NVIDIA's L4T PyTorch image.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.jetson.yml up --build
+#
+# Pick the L4T tag matching your JetPack (check with: cat /etc/nv_tegra_release):
+#   JetPack 6.x (L4T r36.x) -> r36.4.0   (default)
+#   JetPack 5.x (L4T r35.x) -> r35.4.1   (export L4T_PYTORCH_IMAGE=dustynv/l4t-pytorch:r35.4.1)
+services:
+  ai-service:
+    build:
+      args:
+        BASE_IMAGE: ${L4T_PYTORCH_IMAGE:-dustynv/l4t-pytorch:r36.4.0}
+        TORCH_MODE: skip
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: all

@@ -285,62 +285,6 @@ exports.getReport = async (req, res, next) => {
          .text('Heatmap overlay unavailable', box2X, imgY + 90, { width: imgBoxWidth, align: 'center' });
     }
 
-    // Full Pathology Breakdown Table
-    let tableY = imgY + imgBoxHeight + 20;
-    doc.fontSize(11).font('Helvetica-Bold').fillColor('#0f172a')
-       .text('4. FULL 14-PATHOLOGY SCREENING BREAKDOWN', 40, tableY);
-    tableY += 18;
-
-    doc.roundedRect(40, tableY, 515, 140, 6).fillAndStroke('#ffffff', '#e2e8f0');
-
-    // Table Header
-    doc.rect(41, tableY + 1, 513, 18).fill('#f1f5f9');
-    doc.fontSize(8).font('Helvetica-Bold').fillColor('#475569');
-    doc.text('PATHOLOGY CLASS', 55, tableY + 5);
-    doc.text('PROBABILITY', 195, tableY + 5);
-    doc.text('STATUS', 260, tableY + 5);
-
-    doc.text('PATHOLOGY CLASS', 315, tableY + 5);
-    doc.text('PROBABILITY', 455, tableY + 5);
-    doc.text('STATUS', 520, tableY + 5);
-
-    let rowY = tableY + 23;
-    const allPreds = predictions.length ? predictions : [
-      { disease: 'Atelectasis', probability: 0.05, threshold: 0.45, detected: false },
-      { disease: 'Cardiomegaly', probability: 0.02, threshold: 0.45, detected: false },
-      { disease: 'Effusion', probability: 0.04, threshold: 0.45, detected: false },
-      { disease: 'Infiltration', probability: 0.08, threshold: 0.45, detected: false },
-      { disease: 'Mass', probability: 0.01, threshold: 0.45, detected: false },
-      { disease: 'Nodule', probability: 0.03, threshold: 0.45, detected: false },
-      { disease: 'Pneumonia', probability: 0.06, threshold: 0.45, detected: false },
-      { disease: 'Pneumothorax', probability: 0.01, threshold: 0.45, detected: false },
-      { disease: 'Consolidation', probability: 0.02, threshold: 0.45, detected: false },
-      { disease: 'Edema', probability: 0.01, threshold: 0.45, detected: false },
-      { disease: 'Emphysema', probability: 0.01, threshold: 0.45, detected: false },
-      { disease: 'Fibrosis', probability: 0.03, threshold: 0.45, detected: false },
-      { disease: 'Pleural_Thickening', probability: 0.02, threshold: 0.45, detected: false },
-      { disease: 'Hernia', probability: 0.00, threshold: 0.45, detected: false },
-    ];
-
-    const halfLength = Math.ceil(allPreds.length / 2);
-    for (let i = 0; i < halfLength; i++) {
-      const left = allPreds[i];
-      const right = allPreds[i + halfLength];
-
-      // Left col
-      doc.fontSize(8).font('Helvetica-Bold').fillColor('#334155').text(left.disease, 55, rowY);
-      doc.font('Helvetica').fillColor('#0f172a').text(`${(left.probability * 100).toFixed(1)}%`, 195, rowY);
-      doc.font('Helvetica-Bold').fillColor(left.detected ? '#dc2626' : '#16a34a').text(left.detected ? 'POSITIVE' : 'NORMAL', 260, rowY);
-
-      // Right col
-      if (right) {
-        doc.font('Helvetica-Bold').fillColor('#334155').text(right.disease, 315, rowY);
-        doc.font('Helvetica').fillColor('#0f172a').text(`${(right.probability * 100).toFixed(1)}%`, 455, rowY);
-        doc.font('Helvetica-Bold').fillColor(right.detected ? '#dc2626' : '#16a34a').text(right.detected ? 'POSITIVE' : 'NORMAL', 520, rowY);
-      }
-      rowY += 15;
-    }
-
     // Disclaimer & Footer
     doc.moveTo(40, 720).lineTo(555, 720).strokeColor('#cbd5e1').stroke();
     doc

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import { downloadReport } from '../services/reportService';
 import MultiDiseaseResults from '../components/MultiDiseaseResults';
 import HeatmapGallery from '../components/HeatmapGallery';
 import ReportEditor from '../components/ReportEditor';
@@ -85,21 +85,12 @@ export default function ResultsPage() {
     : null;
 
   async function handleDownloadPDF() {
+    if (pdfLoading) return;
     setPdfLoading(true);
     try {
       const id = result.id || result._id || result.request_id;
       if (id) {
-        const response = await api.get(`/history/${id}/report/pdf`, {
-          responseType: 'blob',
-        });
-        const blobUrl = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.setAttribute('download', `Lung_Disease_Report_${id}.pdf`);
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        window.URL.revokeObjectURL(blobUrl);
+        await downloadReport(id);
         return;
       }
 

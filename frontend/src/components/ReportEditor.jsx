@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
+import { downloadReport } from '../services/reportService';
 
 export default function ReportEditor({ scanId, initialReport = {}, initialStatus = 'DRAFT' }) {
   const [findings, setFindings] = useState(
@@ -68,16 +69,7 @@ export default function ReportEditor({ scanId, initialReport = {}, initialStatus
   const handleDownloadPDF = async () => {
     if (!scanId) return;
     try {
-      const response = await api.get(`/history/${scanId}/report/pdf`, {
-        responseType: 'blob',
-      });
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `Lung_Disease_Report_${scanId}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      await downloadReport(scanId);
     } catch (err) {
       alert('Failed to download PDF report.');
     }

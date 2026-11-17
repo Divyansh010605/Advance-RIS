@@ -2,6 +2,7 @@
 Multi-model Ensemble & Test-Time Augmentation (TTA) with Uncertainty Quantification.
 Supports DenseNet-121, ResNet-50, and Swin Transformer multi-label classifiers for NIH ChestX-ray14.
 """
+import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -79,6 +80,23 @@ class MultiModelEnsemble:
 
         self.models: Dict[str, nn.Module] = {}
         self.normalized_weights: Dict[str, float] = {}
+        self.model_thresholds: Dict[str, Dict[str, float]] = self._load_model_thresholds()
+
+    @staticmethod
+    def _load_model_thresholds() -> Dict[str, Dict[str, float]]:
+        """Per-model, per-disease thresholds produced by scripts/calibrate_thresholds.py."""
+        path = Path(__file__).resolve().parent.parent / "configs" / "model_thresholds.json"
+        try:
+            if path.is_file():
+                data = json.loads(path.read_text())
+                logger.info("Loaded calibrated per-model thresholds from %s", path)
+                return data.get("thresholds", {})
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Could not read %s: %s", path, exc)
+        return {}
+
+    def _thr(self, model_name: str, disease: str, default: float) -> float:
+        return float(self.model_thresholds.get(model_name, {}).get(disease, default))
 
     def register_model(self, name: str, model: nn.Module) -> None:
         """Registers a model backbone into the ensemble."""
@@ -139,9 +157,9 @@ class MultiModelEnsemble:
         try:
             s_cand = [
                 swin_path,
+                str(retrained_dir / "swin" / "pretrained_SwinCheX_classifier.pth"),
                 str(retrained_dir / "swin" / "swin_tiny.pth"),
                 str(retrained_dir / "swin" / "swin_tiny_patch4_window7_224.pth"),
-                str(retrained_dir / "swin" / "pretrained_SwinCheX_classifier.pth"),
             ]
             s_path = next((p for p in s_cand if p and Path(p).is_file()), None)
             swin = build_swin(
@@ -269,16 +287,23 @@ class MultiModelEnsemble:
                 for m_name in self.models
                 if m_name in results.get("per_model_probabilities", {})
             }
-            agreeing = [m for m, p in per_model.items() if p >= thresh]
+            # Each model votes against its own calibrated threshold (raw probabilities of
+            # the three architectures are not on the same scale).
+            model_thr = {m: self._thr(m, disease, thresh) for m in per_model}
+            agreeing = [m for m, p in per_model.items() if p >= model_thr[m]]
             consensus_str = f"{len(agreeing)}/{len(self.models)}"
+            finite = sorted(t for t in model_thr.values() if t <= 1.0)
+            if finite:
+                thresh = finite[len(finite) // 2]
 
-            # Clinical consensus rule: if any 2 models show that there is a disease, declare it as detected (not normal)
+            # Majority vote: >=2 of 3 models (all of them if fewer are loaded).
+            needed = 2 if len(self.models) >= 3 else len(self.models)
             if disease != "No_Finding":
-                is_detected = bool(len(agreeing) >= 2 or prob >= thresh)
+                is_detected = bool(len(agreeing) >= needed)
                 if is_detected:
                     any_pathology_detected = True
             else:
-                is_detected = bool(prob >= thresh and len(agreeing) >= 2)
+                is_detected = False  # resolved below: normal only if nothing else is detected
 
             predictions_list.append({
                 "disease": disease,
@@ -293,11 +318,9 @@ class MultiModelEnsemble:
                 "consensus": consensus_str,
             })
 
-        # If any pathology is declared detected by 2+ models or threshold, No_Finding is false
-        if any_pathology_detected:
-            for p in predictions_list:
-                if p["disease"] == "No_Finding":
-                    p["detected"] = False
+        for p in predictions_list:
+            if p["disease"] == "No_Finding":
+                p["detected"] = not any_pathology_detected
 
         metadata = {
             "models_evaluated": list(self.models.keys()),
@@ -335,24 +358,25 @@ class MultiModelEnsemble:
             Image.fromarray(arr).save(buf, format="JPEG", quality=90)
             return base64.b64encode(buf.getvalue()).decode("utf-8")
 
-        def _refine_cam(cam_raw: np.ndarray, h: int, w: int, noise_pct: float = 0.20) -> np.ndarray:
-            """Refine raw CAM: interpolate, apply thoracic mask, suppress noise, and smooth."""
-            cam = cv2.resize(cam_raw, (w, h), interpolation=cv2.INTER_LINEAR)
+        def _refine_cam(cam_raw: np.ndarray, h: int, w: int, noise_pct: float = 0.15) -> np.ndarray:
+            """Map a CAM computed on the letterboxed square model input back onto the original
+            image: upsample to the square, crop away the black padding, then clean up."""
+            L = max(h, w)
+            cam = cv2.resize(np.maximum(cam_raw, 0).astype(np.float32), (L, L), interpolation=cv2.INTER_CUBIC)
+            y0, x0 = (L - h) // 2, (L - w) // 2
+            cam = np.maximum(cam[y0:y0 + h, x0:x0 + w], 0.0)
 
-            # Anatomical super-gaussian window
+            # Very mild thoracic prior (nearly flat inside the chest) to damp edge/label artefacts
             y, x = np.ogrid[:h, :w]
-            cy, cx = 0.48 * h, 0.50 * w
-            sy, sx = 0.44 * h, 0.44 * w
-            dist = ((x - cx) / sx) ** 4 + ((y - cy) / sy) ** 4
-            thoracic_mask = np.exp(-0.5 * dist).astype(np.float32)
-            cam = cam * thoracic_mask
+            dist = ((x - 0.5 * w) / (0.62 * w)) ** 6 + ((y - 0.5 * h) / (0.62 * h)) ** 6
+            cam = cam * np.exp(-0.5 * dist).astype(np.float32)
 
             if cam.max() > 0:
-                thresh = noise_pct * cam.max()
-                cam = np.maximum(0.0, cam - thresh)
+                cam = np.maximum(0.0, cam - noise_pct * cam.max())
                 if cam.max() > 0:
                     cam = cam / cam.max()
-            cam = cv2.GaussianBlur(cam, (15, 15), 0)
+            k = (max(h, w) // 40) | 1
+            cam = cv2.GaussianBlur(cam, (k, k), 0)
             return np.clip(cam, 0.0, 1.0)
 
         def _cam_to_items(cam: np.ndarray, disease: str, model_name: str,
@@ -369,7 +393,9 @@ class MultiModelEnsemble:
             if disease not in self.classes:
                 continue
             idx = self.classes.index(disease)
-            is_no_finding = (disease == "No_Finding" or idx >= 14)
+            if disease == "No_Finding" or idx >= 14:
+                continue  # "absence of disease" has no meaningful localisation
+            is_no_finding = False
 
             model_cams: Dict[str, np.ndarray] = {}
 
@@ -473,12 +499,10 @@ class MultiModelEnsemble:
                     x_swin = _prepare_swin_input(image_tensor.clone(), 224).to(self.device)
                     acts_s, grads_s = [], []
                     inner_model = getattr(swin_model, "model", swin_model)
-                    target_s = None
-                    if hasattr(inner_model, "layers") and len(inner_model.layers) > 0:
-                        last_layer = inner_model.layers[-1]
-                        if hasattr(last_layer, "blocks") and len(last_layer.blocks) > 0:
-                            last_block = last_layer.blocks[-1]
-                            target_s = getattr(last_block, "norm2", getattr(last_block, "norm1", last_block))
+                    # Final stage output (after last block + final norm), spatial 7x7 tokens
+                    target_s = getattr(inner_model, "norm", None)
+                    if target_s is None and hasattr(inner_model, "layers"):
+                        target_s = inner_model.layers[-1]
 
                     if target_s is not None:
                         if is_no_finding:
@@ -529,13 +553,6 @@ class MultiModelEnsemble:
                             model_cams["swin"] = cam_s / cam_s.max()
                 except Exception as e_swin:
                     logger.warning("Swin LayerCAM failed for %s: %s", disease, e_swin)
-
-            # Fallback for models without CAM: cross-fill so all models display
-            base_cam = next(iter(model_cams.values()), None)
-            if base_cam is not None:
-                for m_k in ("densenet121", "resnet50", "swin"):
-                    if m_k not in model_cams and m_k in self.models:
-                        model_cams[m_k] = base_cam.copy()
 
             # ── 4. Generate fused ensemble CAM + individual model CAM items ───
             if model_cams:

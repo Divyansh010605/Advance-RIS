@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { downloadReport } from '../services/reportService';
 
 const STATUS_COLORS = {
   PATHOLOGY_DETECTED: { bg: '#3d1a1a', text: '#f87171', dot: '#ef4444' },
@@ -87,17 +88,7 @@ export default function HistoryPage() {
 
   const handleDownloadPDF = async (id) => {
     try {
-      const response = await api.get(`/history/${id}/report/pdf`, {
-        responseType: 'blob',
-      });
-      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `Lung_Disease_Report_${id}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      await downloadReport(id);
     } catch (err) {
       alert('Failed to download report. Please try again.');
     }
