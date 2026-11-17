@@ -1,16 +1,42 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 
 export default function ReportEditor({ scanId, initialReport = {}, initialStatus = 'DRAFT' }) {
   const [findings, setFindings] = useState(
-    Array.isArray(initialReport.findings) ? initialReport.findings.join('\n') : ''
+    Array.isArray(initialReport?.findings)
+      ? initialReport.findings.join('\n')
+      : typeof initialReport?.findings === 'string'
+      ? initialReport.findings
+      : ''
   );
   const [impression, setImpression] = useState(
-    Array.isArray(initialReport.impression) ? initialReport.impression.join('\n') : ''
+    Array.isArray(initialReport?.impression)
+      ? initialReport.impression.join('\n')
+      : typeof initialReport?.impression === 'string'
+      ? initialReport.impression
+      : ''
   );
   const [status, setStatus] = useState(initialStatus);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    if (initialReport) {
+      if (Array.isArray(initialReport.findings)) {
+        setFindings(initialReport.findings.join('\n'));
+      } else if (typeof initialReport.findings === 'string') {
+        setFindings(initialReport.findings);
+      }
+      if (Array.isArray(initialReport.impression)) {
+        setImpression(initialReport.impression.join('\n'));
+      } else if (typeof initialReport.impression === 'string') {
+        setImpression(initialReport.impression);
+      }
+      if (initialStatus) {
+        setStatus(initialStatus);
+      }
+    }
+  }, [initialReport, initialStatus]);
 
   const handleSave = async (approve = false) => {
     if (!scanId) return;

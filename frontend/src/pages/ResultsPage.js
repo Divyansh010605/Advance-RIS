@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import api from '../services/api';
 import MultiDiseaseResults from '../components/MultiDiseaseResults';
 import HeatmapGallery from '../components/HeatmapGallery';
 import ReportEditor from '../components/ReportEditor';
@@ -53,9 +54,9 @@ export default function ResultsPage() {
 
   const predictions = result.predictions || [];
   const heatmaps = result.heatmaps || [];
-  const report = result.report || {};
+  const report = result.report || result.aiReport || (result.finalReport?.findings?.length ? result.finalReport : {}) || {};
   const meta = result.metadata || {};
-  const scanId = result.id || result.request_id;
+  const scanId = result.id || result._id || result.request_id;
 
   const detectedCount = predictions.filter(
     (p) => p.disease !== 'No_Finding' && (p.detected || (Array.isArray(p.models_agreeing) && p.models_agreeing.length >= 2))
@@ -86,15 +87,40 @@ export default function ResultsPage() {
   async function handleDownloadPDF() {
     setPdfLoading(true);
     try {
-      // Use request_id from result to fetch PDF from job or generate fresh
+      const id = result.id || result._id || result.request_id;
+      if (id) {
+        const response = await api.get(`/history/${id}/report/pdf`, {
+          responseType: 'blob',
+        });
+        const blobUrl = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.setAttribute('download', `Lung_Disease_Report_${id}.pdf`);
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(blobUrl);
+        return;
+      }
+
+      // Fallback: direct AI Service PDF generation using base64 preview
+      let b64 = result._imageB64 || result.originalImageBase64;
+      if (!b64 && previewUrl && previewUrl.startsWith('data:')) {
+        b64 = previewUrl.split(',')[1];
+      }
+      if (!b64) {
+        alert('Unable to generate PDF: Missing scan ID or image preview.');
+        return;
+      }
+
       const resp = await fetch(`${API_BASE}/api/v1/report/pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          image: result._imageB64 || '',  // stored during submission
+          image: b64,
           mime_type: 'image/jpeg',
-          use_ensemble: meta.ensemble_enabled || false,
-          use_tta: meta.tta_enabled || false,
+          use_ensemble: meta.ensemble_enabled ?? true,
+          use_tta: meta.tta_enabled ?? false,
         }),
       });
       if (!resp.ok) {
@@ -109,7 +135,7 @@ export default function ResultsPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      alert('PDF download error: ' + e.message);
+      alert('PDF download error: ' + (e.response?.data?.message || e.message));
     } finally {
       setPdfLoading(false);
     }
