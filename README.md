@@ -16,10 +16,10 @@
 
 **Advance-RIS** is an end-to-end, hospital-grade **Radiology Information System (RIS)** and **Computer-Aided Diagnosis (CAD)** platform designed for automated multi-label thoracic disease screening on chest radiographs (CXRs). 
 
-Trained and benchmarked on the **NIH ChestX-ray14** dataset (112,120 frontal radiographs, 14 thoracic pathologies), the platform features a clinical **Tri-Model Consensus Ensemble** (DenseNet-121, ResNet-50, and SwinCheX Vision Transformer), **Multi-Backbone LayerCAM Explainable AI (XAI)**, **Vision-Language Model (VLM)** grounded radiology reporting, and full PACS/DICOM image handling.
+Trained and benchmarked on the **NIH ChestX-ray14** dataset (112,120 frontal radiographs across 14 thoracic pathologies), the platform features a clinical **Tri-Model Consensus Ensemble** (DenseNet-121, ResNet-50, and SwinCheX Vision Transformer), **Multi-Backbone LayerCAM Explainable AI (XAI)**, **Vision-Language Model (VLM)** grounded radiology reporting, and full PACS/DICOM image handling.
 
 > [!IMPORTANT]
-> **Clinical & Research Disclaimer**: This platform is designed and evaluated strictly for scientific research, educational demonstrations, and capstone evaluation. It is **NOT** a CE-marked or FDA-cleared medical device and must never replace clinical judgment by a licensed medical practitioner.
+> **Clinical & Research Disclaimer**: This platform is designed and evaluated strictly for scientific research, educational demonstrations, and capstone evaluation. It is **NOT** an FDA-cleared or CE-marked medical diagnostic device and must never replace clinical judgment by a licensed medical practitioner.
 
 ---
 
@@ -59,36 +59,101 @@ The solution is orchestrated across four decoupled, scalable tiers:
 
 ---
 
+## ⚙️ Model Training & Technical Specifications
+
+| Parameter | DenseNet-121 | ResNet-50 | SwinCheX (Swin-Tiny) |
+| :--- | :--- | :--- | :--- |
+| **Model Framework** | PyTorch (v2.2+) / TorchXRayVision | PyTorch (v2.2+) / Torchvision | PyTorch (v2.2+) / `timm` |
+| **Architecture** | Densely Connected CNN (DenseBlock 4) | Deep Residual Network (Layer 4) | Shifted-Window ViT (`window7_224`) |
+| **Input Dimensions** | `224 × 224 × 3` (Aspect-ratio padded) | `512 × 512 × 3` (High-resolution) | `224 × 224 × 3` |
+| **Optimizer** | AdamW (`weight_decay = 1e-4`) | AdamW (`weight_decay = 1e-4`) | AdamW (`weight_decay = 0.05`) |
+| **Initial Learning Rate** | `1e-4` ($0.0001$) | `5e-5` ($0.00005$) | `5e-5` ($0.00005$) |
+| **Minimum Learning Rate** | `1e-6` | `5e-7` | `1e-6` |
+| **LR Scheduler** | Warmup (2 epochs) + Cosine Annealing | Warmup (2 epochs) + Cosine Annealing | Warmup (2 epochs) + Cosine Annealing |
+| **Batch Size** | `32` | `16` | `32` |
+| **Training Epochs** | `20 epochs` | `20 epochs` | `20 epochs` |
+| **Early Stopping** | Patience = 5 epochs (macro-AUROC) | Patience = 5 epochs (macro-AUROC) | Patience = 5 epochs (macro-AUROC) |
+| **Loss Function** | Positive-weighted BCE (`max=50.0`) | Positive-weighted BCE / Focal Loss | Positive-weighted BCE / Asymmetric |
+| **Inference Latency** | Sub-35ms via ONNX Runtime Engine | Sub-45ms via ONNX Runtime Engine | Sub-35ms via PyTorch / ONNX |
+| **Hardware** | NVIDIA CUDA GPU (8–16 GB VRAM) with Automatic Mixed Precision (AMP FP16) and `channels_last` |
+
+---
+
+## 🖼️ Image Preprocessing & Data Augmentation Pipeline
+
+### 1. Image Resizing
+* **Target Dimensions**: `224 × 224` for DenseNet-121 and SwinCheX; `512 × 512` for ResNet-50.
+* **Aspect Ratio Preservation**: In inference, radiographs undergo `resize_with_padding` with high-quality `PIL.Image.LANCZOS` interpolation and symmetrical black letterboxing so anatomy is never distorted.
+* **Training Resizing**: Scaled to $1.14\times$ ($256 \times 256$) followed by random $224 \times 224$ cropping.
+
+### 2. Image Normalization
+* **Standard Normalization**: ImageNet Z-Score:
+  $$\text{Mean} = [0.485, 0.456, 0.406], \quad \text{Std} = [0.229, 0.224, 0.225]$$
+* **TorchXRayVision Scaling (DenseNet-121)**: Grayscale intensity scaled to approximate Hounsfield unit range **$[-1024.0, +1024.0]$**:
+  $$\text{Gray} = (0.299R + 0.587G + 0.114B) \times 2048.0 - 1024.0$$
+* **DICOM Windowing**: Window Center / Window Width linear scaling ($\text{WC}=40, \text{WW}=400$) clipped to $[0.0, 1.0]$ with `MONOCHROME1` photometric inversion.
+
+### 3. Noise Reduction & Spatial Filtering
+* **CLAHE (Contrast Limited Adaptive Histogram Equalization)**: Clip limit of `2.0` with `8 × 8` tile grid enhances bone trabeculae and parenchymal patterns without amplifying background noise.
+* **Noise-Floor Threshold Suppression**: Drops activations below **$20\%$** of peak intensity ($\max(0, \text{CAM} - 0.20 \times \text{CAM}_{\max})$).
+* **Gaussian Blur Smoothing**: $11 \times 11$ and $15 \times 15$ Gaussian filters ($\sigma = 0$) smooth gradient activation maps and suppress high-frequency noise.
+* **Anatomical Super-Gaussian Thoracic Windowing**: $4^{\text{th}}$-order super-Gaussian spatial mask suppresses peripheral edge artifacts outside the rib cage and diaphragm:
+  $$W_{\text{thoracic}}(x, y) = \exp\left( -0.5 \left[ \left(\frac{x - c_x}{s_x}\right)^4 + \left(\frac{y - c_y}{s_y}\right)^4 \right] \right)$$
+
+### 4. Data Augmentation
+* **Training Transforms**:
+  - `RandomHorizontalFlip(p=0.5)`: Mirrors bilateral thoracic symmetry.
+  - `RandomRotation(degrees=±10°)`: Simulates patient positioning tilt.
+  - `RandomCrop(224, 224)`: Simulates distance variations.
+  - `ColorJitter(brightness=0.1, contrast=0.1)`: Simulates X-ray tube exposure variations.
+* **Inference Test-Time Augmentation (TTA)**: Evaluates 4 forward passes (Identity, Horizontal Flip, 95% Center Crop/Scale, Contrast Shift $\pm 5\%$) to generate variance estimates and confidence intervals.
+
+### 5. Handling of Missing & Uncertain Labels
+* **Multi-Hot Target Encoding**: Missing findings encoded as $0.0$, present findings as $1.0$.
+* **Class Imbalance Loss Weighting**: $\text{pos\_weight} = \frac{N_{\text{total}} - N_{\text{pos}}}{\max(N_{\text{pos}}, 1)}$, clamped to **$50.0$** to prevent gradient explosion on rare findings (*Hernia*, *Fibrosis*).
+* **Multi-Label Focal Loss ($\gamma = 2.0$)**: Downweights easy negatives to focus updates on borderline boundaries.
+* **Uncertainty Flags**: Scans with standard deviation $\sigma > 0.15$ are flagged as clinically uncertain (`is_uncertain: true`).
+* **Patient-Level Leakage Prevention**: Data splits strictly group images by `Patient ID` (`assert_no_patient_leakage`).
+
+---
+
 ## 🔬 Core AI & Clinical Capabilities
 
 ### 1. Tri-Model Consensus Ensemble
-The AI inference engine evaluates chest radiographs across three diverse neural network architectures simultaneously:
-* **DenseNet-121 (Densely Connected CNN)**: Extracts fine-grained localized radiologic patterns using dense feature reuse.
+The inference engine evaluates chest radiographs across three diverse neural network architectures simultaneously:
+* **DenseNet-121 (Densely Connected CNN)**: Extracts localized radiologic patterns using dense feature reuse.
 * **ResNet-50 (Deep Residual Network)**: Leverages skip-connections for deep anatomical representation.
-* **SwinCheX (Shifted Window Vision Transformer)**: Self-attention across shifted local windows captures long-range anatomical context across the entire thoracic field.
+* **SwinCheX (Shifted Window Vision Transformer)**: Self-attention across shifted local windows captures global contextual lung patterns.
 
 #### Clinical Consensus Rule
-To protect against false negatives in critical screening workflows, the platform employs a **Majority Voting + Weighted Soft-Vote** consensus:
 $$\text{Detected} \iff (\text{Weighted Soft-Vote Probability} \ge \text{Threshold}) \;\lor\; (\text{Count of Agreeing Models} \ge 2)$$
-If any **two or more models** independently identify a disease above their operating threshold, the pathology is declared **Detected**, and the study is flagged as **Pathology Detected** (`PATHOLOGY_DETECTED`).
+If any **two or more models** independently identify a disease above their operating threshold, the pathology is declared **Detected**, and the overall study is flagged as **Pathology Detected** (`PATHOLOGY_DETECTED`), protecting against false negatives.
 
 ### 2. Multi-Backbone LayerCAM Explainable AI (XAI)
-Rather than a generic Grad-CAM, the system generates high-resolution **LayerCAM** heatmaps across all backbones:
 * **DenseNet-121**: Extracted from DenseBlock 4 (`norm5`).
 * **ResNet-50**: Extracted from Layer 4 residual block (`layer4`).
 * **SwinCheX**: Extracted from Stage 4 transformer blocks with spatial token reconstruction ($B \times N \times C \rightarrow B \times C \times s \times s$).
-* **Anatomical Super-Gaussian Windowing**: Suppresses artifacts outside the thoracic rib cage and diaphragm:
-  $$W_{\text{thoracic}}(x, y) = \exp\left( -0.5 \left[ \left(\frac{x - c_x}{s_x}\right)^4 + \left(\frac{y - c_y}{s_y}\right)^4 \right] \right)$$
-* **Noise Floor Filtering**: Drops signals below 20% of peak intensity and applies Gaussian smoothing ($15\times 15, \sigma=0$).
+* Generates side-by-side comparative attention panels: Original Radiograph, SwinCheX LayerCAM, DenseNet-121 LayerCAM, ResNet-50 LayerCAM, and Fused Ensemble CAM.
 
-### 3. Predictive Uncertainty Quantification & TTA
-* **Test-Time Augmentation (TTA)**: Evaluates multiple perturbed variations per scan (identity, horizontal flip, scale/crop, contrast modulation).
-* **Uncertainty Metrics**: Reports predictive standard deviation ($\sigma$), 95% Confidence Intervals ($[\text{CI}_{\text{low}}, \text{CI}_{\text{high}}]$), and warns clinicians when uncertainty exceeds acceptable variance thresholds.
+### 3. Vision-Language Grounded Radiology Reports (VLM)
+* **BioMedCLIP & Structured Clinical Lexicon**: Generates standardized American College of Radiology (ACR) style **Findings** and **Impressions**.
+* **Human-in-the-Loop Report Editor**: Radiologists can review, edit, and sign off on reports directly in the web UI.
+* **ACR PDF Clinical Report**: Generates and downloads a complete 2-page publication-grade PDF containing study metadata, pathology detection summary, findings, impressions, and LayerCAM heatmaps.
 
-### 4. Vision-Language Grounded Radiology Reports
-* **BioMedCLIP & Structured Clinical Lexicon**: Produces standardized American College of Radiology (ACR) style **Findings** and **Impressions**.
-* **Hallucination Prevention**: Validates that all findings in generated text correspond directly to verified classifier probabilities.
-* **PDF Report Generation**: Exports publication-quality clinical reports containing the radiograph, side-by-side LayerCAM heatmaps, model agreement matrix, and radiologist approval sign-off.
+---
+
+## 🛡️ Security, Privacy & Compliance (HIPAA)
+
+| Security Domain | Implementation in Advance-RIS |
+| :--- | :--- |
+| **Dataset De-Identification** | **NIH ChestX-ray14**: Fully de-identified per **HIPAA Safe Harbor** standards (all 18 PHI identifiers removed). |
+| **Runtime Metadata Stripping** | Automated stripping of EXIF tags, GPS coordinates, and camera data via `sharp` and `privacyFilter` middleware. |
+| **DICOM Anonymization** | `pydicom` loader strips patient names, institutional addresses, and physician IDs; retains only pixel data and display parameters. |
+| **Authentication** | Cryptographic **JSON Web Tokens (JWT)** with 7-day expiration and Bearer token verification. |
+| **Password Protection** | One-way salted hashing via **`bcryptjs`** (passwords never stored or returned in plaintext). |
+| **Access Control (RBAC)** | Role-Based Access Control (`user`, `radiologist`, `admin`), restricting audit trails to authorized administrators. |
+| **API & Network Security** | **Helmet** security headers, **Express Rate Limiting** (100 req / 15 min), and internal Docker network isolation (`xray-net`). |
+| **Audit Trails** | Immutable **`AuditLog`** collection tracking user ID, IP address, user agent, endpoint, HTTP status, and latency. |
 
 ---
 
@@ -342,15 +407,17 @@ npm start
 | `POST` | `/api/auth/login` | Authenticate user and issue JWT token | No |
 | `POST` | `/api/upload` | Upload chest radiograph / DICOM for screening | Yes |
 | `GET` | `/api/history` | Retrieve study history with longitudinal tracking | Yes |
+| `GET` | `/api/history/:id/report/pdf` | Stream clinical 2-page ACR diagnostic PDF report | Yes |
+| `PUT` | `/api/history/:id/report` | Edit or approve automated radiology findings/impression | Yes |
 | `GET` | `/api/analytics` | Aggregated disease distribution and screening metrics | Yes |
 | `GET` | `/api/audit` | HIPAA activity logs and compliance history | Admin |
 
 ---
 
-## 🛡️ Security, Privacy & Model Weight Handling
+## 🛡️ Model Weight Management
 
-* **Protected Health Information (PHI)**: All patient metadata from DICOM headers is stripped and anonymized prior to storage and model processing.
-* **Large Model Weights**: Neural network weights (`*.pth`, `*.bin`, `*.safetensors`) exceed GitHub's 100 MB file limit. They are stored locally on disk under `ai-service/outputs/retrained/` (mounted into Docker at runtime) and are strictly excluded from git tracking via [.gitignore](.gitignore).
+* Neural network checkpoints (`*.pth`, `*.bin`, `*.safetensors`) exceed GitHub's 100 MB file limit.
+* Weights are stored locally on disk under `ai-service/outputs/retrained/` (mounted into Docker at runtime) and are strictly excluded from git tracking via [.gitignore](.gitignore).
 
 ---
 
