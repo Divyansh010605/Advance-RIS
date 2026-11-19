@@ -384,8 +384,7 @@ npm start
 5. **Lee et al. (2026)**: *MS-VLM & GazeX: Aligning Multi-Scale Vision-Language Models with Radiologist Gaze Dynamics*. Benchmark on eye-tracking and localized attention maps.
 6. **Shi et al. (2026)**: *U-VLM: Hierarchical Grounding for Automated Radiology Reporting*. Framework for structured Findings and Impressions generation.
 7. **Jiang et al. (2021)**: *LayerCAM: Exploring Hierarchical Class Activation Maps for Localization*. IEEE Transactions on Image Processing, 30, 5875-5888.
-8. **Wang et al. (2017)**: *ChestX-ray8: Hospital-scale Chest X-ray Database and Benchmarks on Weakly-Supervised Classification and Localization of Common Thorax Diseases*. IEEE CVPR 2017.
-9. **Johnson et al. (2019)**: *MIMIC-CXR: A large publicly available database of labeled chest radiographs*. Scientific Data, 6(1), 317.
+
 
 ---
 
