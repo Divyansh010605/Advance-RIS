@@ -18,8 +18,8 @@
 Medical imaging plays a vital role in the early detection and diagnosis of thoracic diseases. However, interpreting chest radiographs can be time-consuming and prone to observer variability due to complex anatomical overlaps, low contrast, and subtle lesion presentations. 
 
 **Advance-RIS** (NU401 Research & Development Project) is an integrated, hospital-grade **Radiology Information System (RIS)** and **Computer-Aided Diagnosis (CAD)** platform for automated multi-disease chest X-ray screening. Evolving from the preliminary NU302 prototype, Advance-RIS incorporates:
-1. **Tri-Model Consensus Ensemble**: Combines **DenseNet-121**, **ResNet-50**, and **Swin Transformer (SwinCheX)** to classify 14 thoracic pathologies trained and validated across **439,000 frontal chest radiographs** from the **NIH ChestX-ray14** and **MIMIC-CXR** datasets.
-2. **Fine-Grained Visual Explainability**: Employs **LayerCAM** with pixel-wise spatial gradient weighting and super-Gaussian thoracic windowing to overcome the coarse resolution limits of classical Grad-CAM.
+1. **Tri-Model Consensus Ensemble**: Combines **DenseNet-121**, **ResNet-50**, and **Swin Transformer (SwinCheX)** to classify 14 thoracic pathologies trained and validated across **439,000 frontal chest radiographs** from the **NIH ChestX-ray14** and **MIMIC-CXR** datasets. The ensemble produces a **fused heatmap** by blending per-model LayerCAM activations — there is no separate ensemble inference model.
+2. **Fine-Grained Visual Explainability**: Employs **LayerCAM** with pixel-wise spatial gradient weighting and super-Gaussian thoracic windowing for precise anatomical localization.
 3. **Vision-Language Grounded Reporting**: Evaluates **BioMedCLIP** image-text matching to generate editable, structured ACR-style Findings and Impressions with a human-in-the-loop review workflow and publication-grade PDF report exports.
 4. **Edge & Cloud Deployment**: Validated across high-performance **CUDA GPU** infrastructure and **NVIDIA Jetson** edge devices for point-of-care clinical inference.
 
@@ -42,9 +42,7 @@ The classification backbones were trained on **307,300** images, tuned on **65,8
 | **Weighted Soft-Voting Ensemble** | Consensus (DenseNet: 0.45, Swin: 0.30, ResNet: 0.25) | **96.10%** | **95.40%** | **95.00%** | **0.97** |
 
 * **Model Complementarity**: CNNs excel at extracting localized high-frequency edge textures and focal consolidations, while the Swin Transformer captures long-range bilateral lung field dependencies and subtle interstitial patterns.
-* **Ensemble Consensus Rule**: A pathology is flagged positive if either:
-  $$\text{Ensemble Probability } p_c \ge \tau_c \quad\lor\quad \sum_{m=1}^{3} \mathbb{I}(p_c^{(m)} \ge \tau_c) \ge 2$$
-  This 2-of-3 model agreement mechanism drastically cuts false negatives in emergency triage scenarios.
+* **Fused Ensemble Heatmap**: Each model independently generates a per-class LayerCAM heatmap from its own feature extraction layer. These per-backbone attention maps are **blended together** using weighted averaging (DenseNet-121: 0.45, SwinCheX: 0.30, ResNet-50: 0.25) to produce a single **Fused Ensemble CAM** — there is no separate ensemble inference network. The final probability is the weighted average of each model's softmax output for that class.
 
 ---
 
@@ -60,31 +58,18 @@ BioMedCLIP was evaluated on a curated clinical benchmark subset of **1,000 chest
 
 ---
 
-## 🔍 Explainable AI: LayerCAM vs. Traditional Grad-CAM
+## 🔍 Explainable AI: LayerCAM
 
-Classical Grad-CAM computes a scalar weight $w_k^c$ per feature map by globally spatial-averaging the gradients:
-$$w_k^c = \frac{1}{Z} \sum_{i} \sum_{j} \frac{\partial Y^c}{\partial A_k(i, j)}$$
-
-Because positive and negative gradient values cancel each other out over large spatial extents, Grad-CAM produces coarse, blurry heatmaps that often bleed over heart borders, ribs, and diaphragmatic crura.
-
-### The LayerCAM Advancement
-**LayerCAM (Jiang et al., 2021)** calculates fine-grained, **pixel-wise gradient weights** $w_k^c(i, j)$:
+**LayerCAM** is the sole XAI method used in Advance-RIS. It computes fine-grained, **pixel-wise gradient weights** $w_k^c(i, j)$ directly at each spatial activation location, preserving high spatial resolution without the cancellation artifact of global average pooling:
 $$w_k^c(i, j) = \text{ReLU}\left( \frac{\partial Y^c}{\partial A_k(i, j)} \right)$$
 $$M_{\text{LayerCAM}}^c = \text{ReLU}\left( \sum_{k} w_k^c(i, j) \cdot A_k(i, j) \right)$$
 
-```
-                                    Grad-CAM vs. LayerCAM
-    
-      Input Radiograph               Standard Grad-CAM                Advance-RIS LayerCAM
-    +------------------+          +--------------------+          +--------------------+
-    |   (.)      (.)   |          |    (######)        |          |     .::*#.         |
-    |  /            \  |  ----->  |  (##########)      |  ----->  |   .:*####*:        |
-    | |   [Lesion]   | |          |   (########)       |          |    [Focal Nodule]  |
-    |  \____________/  |          |      (####)        |          |     '::*#'         |
-    +------------------+          +--------------------+          +--------------------+
-                              Coarse, blurred blob           Sharply bounded to focal
-                              crossing anatomical margins     pathology & parenchymal margin
-```
+Each model backbone generates its own LayerCAM heatmap from its deepest convolutional or attention layer:
+* **DenseNet-121**: Extracted from DenseBlock 4 (`norm5`).
+* **ResNet-50**: Extracted from Layer 4 residual block (`layer4`).
+* **SwinCheX**: Extracted from Stage 4 transformer blocks with spatial token reconstruction ($B \times N \times C \rightarrow B \times C \times s \times s$).
+
+These three individual heatmaps are then **fused** into a single **Fused Ensemble CAM** using the same ensemble weights (DenseNet: 0.45, Swin: 0.30, ResNet: 0.25), giving a composite view of where all three models are collectively attending.
 
 ### Thoracic Super-Gaussian Spatial Filtering
 In medical X-ray screening, radiopaque patient identification tags (lead "L/R" markers), pacemaker wires, and image edges introduce high-gradient boundary artifacts. Advance-RIS applies a 4th-order super-Gaussian spatial mask centered on the thoracic cavity:
@@ -162,7 +147,7 @@ Advance-RIS decouples clinical workflows into four secure, containerized tiers:
 
 Advance-RIS supports low-power, localized inference on **NVIDIA Jetson** edge hardware (Jetson Orin / Xavier):
 * **Direct Point-of-Care Triage**: Runs independently of external cloud connections, ideal for rural clinics, field hospitals, and military mobile screening units.
-* **TensorRT / ONNX Optimization**: Quantized FP16 backbones yield sub-45ms latency per radiograph on Jetson Orin.
+* **TensorRT / ONNX Optimization**: Quantized FP16 backbones yield approximately **15 seconds** latency per full study (all three models + heatmap fusion) on Jetson Orin — suitable for point-of-care triage workflows.
 * **DICOM StoreSCP Listener**: Ingests direct X-ray modality pushes over local hospital LANs via DICOM port 11112.
 
 ---
